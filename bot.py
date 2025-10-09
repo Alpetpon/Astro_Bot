@@ -30,6 +30,19 @@ async def main():
     logger.info("Initializing database...")
     init_db()
     
+    # Автоматическое создание демо-курсов при первом запуске
+    from database import get_db, Course
+    db = get_db()
+    try:
+        courses_count = db.query(Course).count()
+        if courses_count == 0:
+            logger.info("No courses found. Creating sample courses...")
+            from utils.admin import AdminPanel
+            AdminPanel.create_sample_courses()
+            logger.info("Sample courses created successfully!")
+    finally:
+        db.close()
+    
     # Создание бота и диспетчера
     bot = Bot(
         token=config.BOT_TOKEN,
