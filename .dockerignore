@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+
+# База данных (локальная)
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Env файлы
+.env
+
+# Документация
+README.md
+
+# Скрипты для локальной разработки
+run.sh
+check_config.py
+setup_courses.py
+
+# Тесты
+tests/
+*.test.py
+

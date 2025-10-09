@@ -17,7 +17,23 @@ class Config:
     WEBHOOK_URL = os.getenv('WEBHOOK_URL', '')
     
     # База данных
-    DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///./astro_bot.db')
+    # В продакшене на Amvera используется /data для постоянного хранилища
+    # Локально используется текущая директория
+    def _get_database_url():
+        """Определяет путь к БД в зависимости от окружения"""
+        db_url = os.getenv('DATABASE_URL')
+        
+        if db_url:
+            return db_url
+        
+        # Если директория /data существует (продакшен на Amvera), используем её
+        if os.path.exists('/data') and os.path.isdir('/data'):
+            return 'sqlite:////data/astro_bot.db'
+        
+        # Иначе используем локальную директорию
+        return 'sqlite:///./astro_bot.db'
+    
+    DATABASE_URL = _get_database_url()
     
     # Настройки напоминаний
     INACTIVITY_DAYS = 3  # Количество дней без активности для напоминания
