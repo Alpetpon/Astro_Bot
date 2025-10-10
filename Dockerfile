@@ -24,6 +24,7 @@ RUN mkdir -p /data
 # Установка переменной окружения для Python (не создавать .pyc файлы)
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+ENV REBUILD_DATE=2025-10-10
 
 # Запуск бота
 CMD ["python", "bot.py"]
