@@ -132,27 +132,32 @@ async def check_payment_status(callback: CallbackQuery):
                 payment.paid_at = datetime.utcnow()
                 db.commit()
                 
-                # Выдаем доступ к курсу
-                await grant_course_access(db, payment)
-                
-                # Уведомляем пользователя
-                course = db.query(Course).filter(Course.id == payment.course_id).first()
-                tariff = db.query(Tariff).filter(Tariff.id == payment.tariff_id).first()
-                
-                success_text = "✅ **Оплата успешна!**\n\n"
-                success_text += f"Вам открыт доступ к курсу «{course.name}»\n\n"
-                
-                if tariff.with_support:
-                    success_text += "👨‍🏫 В ближайшее время с вами свяжется куратор.\n\n"
-                
-                success_text += "📚 Перейдите в «Мой кабинет» для начала обучения!"
-                
-                await callback.message.edit_text(
-                    success_text,
-                    reply_markup=get_back_keyboard("my_cabinet", "🏠 Мой кабинет"),
-                    parse_mode="Markdown"
-                )
-                await callback.answer("✅ Доступ открыт!", show_alert=True)
+                # Проверяем тип продукта
+                if payment.product_type == 'guide':
+                    # Отправляем гайд
+                    await send_guide_to_user(callback, payment)
+                else:
+                    # Выдаем доступ к курсу
+                    await grant_course_access(db, payment)
+                    
+                    # Уведомляем пользователя
+                    course = db.query(Course).filter(Course.id == payment.course_id).first()
+                    tariff = db.query(Tariff).filter(Tariff.id == payment.tariff_id).first()
+                    
+                    success_text = "✅ **Оплата успешна!**\n\n"
+                    success_text += f"Вам открыт доступ к курсу «{course.name}»\n\n"
+                    
+                    if tariff.with_support:
+                        success_text += "👨‍🏫 В ближайшее время с вами свяжется куратор.\n\n"
+                    
+                    success_text += "📚 Перейдите в «Мой кабинет» для начала обучения!"
+                    
+                    await callback.message.edit_text(
+                        success_text,
+                        reply_markup=get_back_keyboard("my_cabinet", "🏠 Мой кабинет"),
+                        parse_mode="Markdown"
+                    )
+                    await callback.answer("✅ Доступ открыт!", show_alert=True)
             else:
                 await callback.answer("⏳ Платеж еще не обработан. Попробуйте через минуту.", show_alert=True)
         else:
@@ -164,6 +169,70 @@ async def check_payment_status(callback: CallbackQuery):
     
     finally:
         db.close()
+
+
+async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
+    """Отправка гайда пользователю после оплаты"""
+    from config import config
+    from aiogram.types import FSInputFile
+    import os
+    
+    try:
+        guide_file = config.GUIDE_RELATIONSHIPS_FILE
+        
+        if not guide_file:
+            await callback.message.answer(
+                "✅ **Оплата успешна!**\n\n"
+                "Гайд будет отправлен вам в течение нескольких минут.\n"
+                "Если возникнут вопросы, свяжитесь с поддержкой.",
+                parse_mode="Markdown"
+            )
+            return
+        
+        # Отправляем файл гайда
+        if guide_file.startswith('http'):
+            # Если это URL, отправляем как ссылку
+            await callback.message.answer(
+                "✅ **Оплата успешна!**\n\n"
+                f"💕 Ваш гайд по отношениям: [Скачать]({guide_file})\n\n"
+                "Желаем вам гармоничных отношений! 🌟",
+                parse_mode="Markdown",
+                reply_markup=get_back_keyboard("main_menu", "🏠 Главное меню")
+            )
+        elif os.path.exists(guide_file):
+            # Если это локальный файл, отправляем документ
+            document = FSInputFile(guide_file)
+            await callback.message.answer_document(
+                document=document,
+                caption="✅ **Оплата успешна!**\n\n💕 Ваш гайд по отношениям готов!\n\nЖелаем вам гармоничных отношений! 🌟",
+                parse_mode="Markdown"
+            )
+            await callback.message.answer(
+                "Приятного изучения! 📖",
+                reply_markup=get_back_keyboard("main_menu", "🏠 Главное меню")
+            )
+        else:
+            # Если file_id или другой формат
+            await callback.message.answer_document(
+                document=guide_file,
+                caption="✅ **Оплата успешна!**\n\n💕 Ваш гайд по отношениям готов!\n\nЖелаем вам гармоничных отношений! 🌟",
+                parse_mode="Markdown"
+            )
+            await callback.message.answer(
+                "Приятного изучения! 📖",
+                reply_markup=get_back_keyboard("main_menu", "🏠 Главное меню")
+            )
+        
+        await callback.answer("✅ Гайд отправлен!", show_alert=True)
+        
+    except Exception as e:
+        print(f"Error sending guide: {e}")
+        await callback.message.answer(
+            "✅ **Оплата успешна!**\n\n"
+            "Произошла ошибка при отправке файла. Пожалуйста, свяжитесь с поддержкой.",
+            parse_mode="Markdown",
+            reply_markup=get_back_keyboard("main_menu", "🏠 Главное меню")
+        )
 
 
 async def grant_course_access(db: Session, payment: Payment):

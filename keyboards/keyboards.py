@@ -32,6 +32,15 @@ def get_back_keyboard(callback: str = "main_menu", text: str = "◀️ Наза�
     return keyboard
 
 
+def get_guide_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для гайда по отношениям"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💳 Купить гайд (990 ₽)", callback_data="buy_guide")],
+        [InlineKeyboardButton(text="◀️ Назад в меню", callback_data="main_menu")]
+    ])
+    return keyboard
+
+
 def get_courses_keyboard(courses: List) -> InlineKeyboardMarkup:
     """Клавиатура каталога курсов"""
     buttons = []

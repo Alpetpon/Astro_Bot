@@ -41,6 +41,9 @@ class Config:
     # Контакты для консультаций
     CONSULTATION_TELEGRAM = os.getenv('CONSULTATION_TELEGRAM', 'your_username')  # Username без @
     
+    # Ссылки на продукты
+    GUIDE_RELATIONSHIPS_FILE = os.getenv('GUIDE_RELATIONSHIPS_FILE', '')  # URL или file_id гайда по отношениям
+    
     # Тексты
     WELCOME_TEXT = """
 👋 Добро пожаловать в мир астропсихологии!

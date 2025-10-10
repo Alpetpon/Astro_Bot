@@ -124,13 +124,14 @@ class Payment(Base):
     
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    course_id = Column(Integer, ForeignKey('courses.id'), nullable=False)
-    tariff_id = Column(Integer, ForeignKey('tariffs.id'), nullable=False)
+    course_id = Column(Integer, ForeignKey('courses.id'), nullable=True)  # Может быть NULL для гайдов
+    tariff_id = Column(Integer, ForeignKey('tariffs.id'), nullable=True)  # Может быть NULL для гайдов
     amount = Column(Float, nullable=False)
     currency = Column(String(10), default='RUB')
     status = Column(String(50), default='pending')  # pending, succeeded, canceled
     payment_id = Column(String(255), unique=True, nullable=True)  # ID платежа в ЮKassa
     confirmation_url = Column(String(500), nullable=True)
+    product_type = Column(String(50), default='course')  # course, guide, consultation
     created_at = Column(DateTime, default=datetime.utcnow)
     paid_at = Column(DateTime, nullable=True)
     
