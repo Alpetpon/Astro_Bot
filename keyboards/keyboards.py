@@ -12,10 +12,13 @@ def get_start_keyboard() -> InlineKeyboardMarkup:
 
 def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     """Главное меню"""
+    from config import config
+    
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👤 Обо мне", callback_data="about_me")],
         [InlineKeyboardButton(text="💕 Гайд-отношения", callback_data="guide_relationships")],
         [InlineKeyboardButton(text="📚 Курсы", callback_data="courses")],
+        [InlineKeyboardButton(text="📅 Записаться на консультацию", url=f"https://t.me/{config.CONSULTATION_TELEGRAM}")],
         [InlineKeyboardButton(text="🏠 Мой кабинет", callback_data="my_cabinet")]
     ])
     return keyboard
