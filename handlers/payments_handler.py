@@ -190,16 +190,7 @@ async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
             return
         
         # Отправляем файл гайда
-        if guide_file.startswith('http'):
-            # Если это URL, отправляем как ссылку
-            await callback.message.answer(
-                "✅ **Оплата успешна!**\n\n"
-                f"💕 Ваш гайд по отношениям: [Скачать]({guide_file})\n\n"
-                "Желаем вам гармоничных отношений! 🌟",
-                parse_mode="Markdown",
-                reply_markup=get_back_keyboard("main_menu", "🏠 Главное меню")
-            )
-        elif os.path.exists(guide_file):
+        if os.path.exists(guide_file):
             # Если это локальный файл, отправляем документ
             document = FSInputFile(guide_file)
             await callback.message.answer_document(
@@ -212,7 +203,7 @@ async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
                 reply_markup=get_back_keyboard("main_menu", "🏠 Главное меню")
             )
         else:
-            # Если file_id или другой формат
+            # Если file_id Telegram
             await callback.message.answer_document(
                 document=guide_file,
                 caption="✅ **Оплата успешна!**\n\n💕 Ваш гайд по отношениям готов!\n\nЖелаем вам гармоничных отношений! 🌟",
