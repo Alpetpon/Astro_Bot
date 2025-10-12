@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from config import config
 from database import get_db, User
-from keyboards import get_main_menu_keyboard, get_back_keyboard, get_guide_keyboard
+from keyboards import get_main_menu_keyboard, get_back_keyboard, get_guide_keyboard, get_about_me_keyboard
 
 router = Router()
 
@@ -35,11 +35,31 @@ async def show_main_menu(callback: CallbackQuery):
 
 @router.callback_query(F.data == "about_me")
 async def show_about_me(callback: CallbackQuery):
-    """Показать информацию о преподавателе"""
+    """Показать информацию о преподавателе с кнопками соц. сетей"""
+    text = config.ABOUT_ME_TEXT + "\n\n📱 **Мои соц. сети:**"
     await callback.message.edit_text(
-        config.ABOUT_ME_TEXT,
-        reply_markup=get_back_keyboard("main_menu", "◀️ Назад в меню"),
+        text,
+        reply_markup=get_about_me_keyboard(),
         parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "about_me_2")
+async def show_about_me_2(callback: CallbackQuery):
+    """Показать информацию о преподавателе с текстовыми ссылками на соц. сети"""
+    text = config.ABOUT_ME_TEXT + f"\n\n📱 **Мои соц. сети:**\n\n"
+    text += f"📱 [Instagram]({config.INSTAGRAM_URL})\n"
+    text += f"🎥 [YouTube]({config.YOUTUBE_URL})\n"
+    text += f"💙 [ВКонтакте]({config.VK_URL})\n"
+    text += f"✈️ [Telegram канал]({config.TELEGRAM_CHANNEL_URL})\n"
+    text += f"📰 [Дзен]({config.DZEN_URL})"
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=get_back_keyboard("main_menu", "◀️ Назад в меню"),
+        parse_mode="Markdown",
+        disable_web_page_preview=True
     )
     await callback.answer()
 

@@ -44,6 +44,13 @@ class Config:
     # Ссылки на продукты
     GUIDE_RELATIONSHIPS_FILE = os.getenv('GUIDE_RELATIONSHIPS_FILE', '')  # URL или file_id гайда по отношениям
     
+    # Соц. сети
+    INSTAGRAM_URL = os.getenv('INSTAGRAM_URL', 'https://instagram.com/your_profile')
+    YOUTUBE_URL = os.getenv('YOUTUBE_URL', 'https://youtube.com/@your_channel')
+    VK_URL = os.getenv('VK_URL', 'https://vk.com/your_profile')
+    TELEGRAM_CHANNEL_URL = os.getenv('TELEGRAM_CHANNEL_URL', 'https://t.me/your_channel')
+    DZEN_URL = os.getenv('DZEN_URL', 'https://dzen.ru/your_profile')
+    
     # Тексты
     WELCOME_TEXT = """
 👋 Добро пожаловать в мир астропсихологии!
