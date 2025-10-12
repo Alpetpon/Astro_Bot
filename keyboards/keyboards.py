@@ -16,7 +16,6 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👤 Обо мне", callback_data="about_me")],
-        [InlineKeyboardButton(text="👤 Обо мне 2", callback_data="about_me_2")],
         [InlineKeyboardButton(text="💕 Гайд-отношения", callback_data="guide_relationships")],
         [InlineKeyboardButton(text="📚 Курсы", callback_data="courses")],
         [InlineKeyboardButton(text="📅 Записаться на консультацию", url=f"https://t.me/{config.CONSULTATION_TELEGRAM}")],
