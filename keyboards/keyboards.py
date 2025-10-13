@@ -63,14 +63,19 @@ def get_guides_list_keyboard() -> InlineKeyboardMarkup:
     return keyboard
 
 
-def get_guide_keyboard(guide_id: str, has_file: bool = False) -> InlineKeyboardMarkup:
+def get_guide_keyboard(guide_id: str, has_file: bool = False, related_course_slug: str = None) -> InlineKeyboardMarkup:
     """Клавиатура для конкретного гайда"""
     buttons = []
     
+    # Кнопка скачивания (гайды теперь бесплатные)
     if has_file:
-        buttons.append([InlineKeyboardButton(text="📥 Скачать гайд", callback_data=f"download_guide_{guide_id}")])
+        buttons.append([InlineKeyboardButton(text="📥 Скачать PDF", callback_data=f"download_guide_{guide_id}")])
     else:
-        buttons.append([InlineKeyboardButton(text="💳 Купить гайд", callback_data=f"buy_guide_{guide_id}")])
+        buttons.append([InlineKeyboardButton(text="📥 Скачать PDF", callback_data=f"download_guide_{guide_id}")])
+    
+    # Кнопка перехода на связанный курс (если есть)
+    if related_course_slug:
+        buttons.append([InlineKeyboardButton(text="📚 Перейти к курсу", callback_data=f"course_{related_course_slug}")])
     
     buttons.append([
         InlineKeyboardButton(text="◀️ К гайдам", callback_data="guides_list"),
