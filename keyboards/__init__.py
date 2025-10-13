@@ -15,7 +15,9 @@ from .keyboards import (
     get_lesson_keyboard,
     get_consultations_keyboard,
     get_consultation_detail_keyboard,
-    get_consultation_options_keyboard
+    get_consultation_options_keyboard,
+    get_admin_keyboard,
+    get_back_to_admin_keyboard
 )
 
 __all__ = [
@@ -35,6 +37,8 @@ __all__ = [
     'get_lesson_keyboard',
     'get_consultations_keyboard',
     'get_consultation_detail_keyboard',
-    'get_consultation_options_keyboard'
+    'get_consultation_options_keyboard',
+    'get_admin_keyboard',
+    'get_back_to_admin_keyboard'
 ]
 

@@ -291,3 +291,23 @@ def get_consultation_options_keyboard(consultation_slug: str, options: List) -> 
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard
 
+
+def get_admin_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура админ-панели"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
+        [InlineKeyboardButton(text="👥 Пользователи", callback_data="admin_users")],
+        [InlineKeyboardButton(text="📦 Покупки", callback_data="admin_purchases")],
+        [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")],
+        [InlineKeyboardButton(text="◀️ Главное меню", callback_data="main_menu")]
+    ])
+    return keyboard
+
+
+def get_back_to_admin_keyboard() -> InlineKeyboardMarkup:
+    """Кнопка возврата в админ-панель"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад в админ-панель", callback_data="admin_panel")]
+    ])
+    return keyboard
+
