@@ -83,7 +83,7 @@ async def show_guide(callback: CallbackQuery):
     guide_id = callback.data.replace("guide_", "")
     
     # Находим гайд в БД
-    db = next(get_db())
+    db = get_db()
     guide = db.query(Guide).filter(Guide.guide_id == guide_id, Guide.is_active == True).first()
     
     if not guide:
@@ -108,7 +108,7 @@ async def download_guide(callback: CallbackQuery):
     guide_id = callback.data.replace("download_guide_", "")
     
     # Находим гайд в БД
-    db = next(get_db())
+    db = get_db()
     guide = db.query(Guide).filter(Guide.guide_id == guide_id, Guide.is_active == True).first()
     
     if not guide:

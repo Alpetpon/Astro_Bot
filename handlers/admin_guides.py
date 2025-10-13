@@ -43,7 +43,7 @@ async def show_guides_management(callback: CallbackQuery):
         await callback.answer("❌ Доступ запрещен", show_alert=True)
         return
     
-    db = next(get_db())
+    db = get_db()
     guides = db.query(Guide).order_by(Guide.order).all()
     
     text = "💝 <b>Управление гайдами</b>\n\n"
@@ -118,7 +118,7 @@ async def create_guide_id(message: Message, state: FSMContext):
     guide_id = message.text.strip().lower().replace(" ", "-")
     
     # Проверка уникальности ID
-    db = next(get_db())
+    db = get_db()
     existing = db.query(Guide).filter(Guide.guide_id == guide_id).first()
     if existing:
         await message.answer(
@@ -194,7 +194,7 @@ async def create_guide_file_id(message: Message, state: FSMContext):
     await state.set_state(GuideManagement.creating_related_course)
     
     # Получаем список курсов для выбора
-    db = next(get_db())
+    db = get_db()
     courses = db.query(Course).all()
     
     data = await state.get_data()
@@ -225,7 +225,7 @@ async def create_guide_save(message: Message, state: FSMContext):
     related_course = message.text.strip() if message.text != '-' else None
     
     data = await state.get_data()
-    db = next(get_db())
+    db = get_db()
     
     try:
         # Определяем максимальный order
@@ -282,7 +282,7 @@ async def manage_guide(callback: CallbackQuery):
         return
     
     guide_id = int(callback.data.split("_")[2])
-    db = next(get_db())
+    db = get_db()
     guide = db.query(Guide).filter(Guide.id == guide_id).first()
     
     if not guide:
@@ -330,7 +330,7 @@ async def toggle_guide(callback: CallbackQuery):
         return
     
     guide_id = int(callback.data.split("_")[2])
-    db = next(get_db())
+    db = get_db()
     guide = db.query(Guide).filter(Guide.id == guide_id).first()
     
     if guide:
@@ -380,7 +380,7 @@ async def delete_guide(callback: CallbackQuery):
         return
     
     guide_id = int(callback.data.split("_")[2])
-    db = next(get_db())
+    db = get_db()
     
     try:
         guide = db.query(Guide).filter(Guide.id == guide_id).first()

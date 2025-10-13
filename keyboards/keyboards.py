@@ -51,7 +51,7 @@ def get_guides_list_keyboard() -> InlineKeyboardMarkup:
     
     buttons = []
     
-    db = next(get_db())
+    db = get_db()
     guides = db.query(Guide).filter(Guide.is_active == True).order_by(Guide.order).all()
     
     for guide in guides:
