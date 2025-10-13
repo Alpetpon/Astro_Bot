@@ -7,6 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy import func
+import re
 
 from config import config
 from database import get_db, Guide, Course
@@ -14,10 +15,36 @@ from database import get_db, Guide, Course
 router = Router()
 
 
+def transliterate(text: str) -> str:
+    """Транслитерация русского текста в латиницу для ID"""
+    translit_dict = {
+        'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo',
+        'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+        'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+        'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch',
+        'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya'
+    }
+    
+    text = text.lower()
+    result = ''
+    for char in text:
+        if char in translit_dict:
+            result += translit_dict[char]
+        elif char.isalnum() or char in '-_':
+            result += char
+        elif char.isspace():
+            result += '-'
+    
+    # Убираем повторяющиеся дефисы и дефисы в начале/конце
+    result = re.sub(r'-+', '-', result)
+    result = result.strip('-')
+    
+    return result
+
+
 class GuideManagement(StatesGroup):
     """Состояния для управления гайдами"""
     creating_name = State()
-    creating_guide_id = State()
     creating_emoji = State()
     creating_description = State()
     creating_file_id = State()
@@ -88,7 +115,8 @@ async def create_guide_start(callback: CallbackQuery, state: FSMContext):
     await state.set_state(GuideManagement.creating_name)
     await callback.message.edit_text(
         "💝 <b>Создание нового гайда</b>\n\n"
-        "Шаг 1/6: Введите название гайда:",
+        "Шаг 1/5: Введите название гайда:\n\n"
+        "💡 ID будет сгенерирован автоматически из названия",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_guides")]
         ])
@@ -98,46 +126,26 @@ async def create_guide_start(callback: CallbackQuery, state: FSMContext):
 
 @router.message(GuideManagement.creating_name)
 async def create_guide_name(message: Message, state: FSMContext):
-    """Сохранение названия и запрос ID"""
-    await state.update_data(name=message.text)
-    await state.set_state(GuideManagement.creating_guide_id)
-    
-    await message.answer(
-        "💝 <b>Создание нового гайда</b>\n\n"
-        f"Название: {message.text}\n\n"
-        "Шаг 2/6: Введите уникальный ID гайда (латиница, без пробелов):",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_guides")]
-        ])
-    )
-
-
-@router.message(GuideManagement.creating_guide_id)
-async def create_guide_id(message: Message, state: FSMContext):
-    """Сохранение ID и запрос эмодзи"""
-    guide_id = message.text.strip().lower().replace(" ", "-")
+    """Сохранение названия, генерация ID и запрос эмодзи"""
+    name = message.text
+    guide_id = transliterate(name)
     
     # Проверка уникальности ID
     db = get_db()
-    existing = db.query(Guide).filter(Guide.guide_id == guide_id).first()
-    if existing:
-        await message.answer(
-            "❌ Гайд с таким ID уже существует. Введите другой ID:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_guides")]
-            ])
-        )
-        return
+    counter = 1
+    original_id = guide_id
+    while db.query(Guide).filter(Guide.guide_id == guide_id).first():
+        guide_id = f"{original_id}-{counter}"
+        counter += 1
     
-    await state.update_data(guide_id=guide_id)
+    await state.update_data(name=name, guide_id=guide_id)
     await state.set_state(GuideManagement.creating_emoji)
     
-    data = await state.get_data()
     await message.answer(
         "💝 <b>Создание нового гайда</b>\n\n"
-        f"Название: {data['name']}\n"
-        f"ID: {guide_id}\n\n"
-        "Шаг 3/6: Введите эмодзи для гайда (или отправьте '-' чтобы пропустить):",
+        f"Название: {name}\n"
+        f"ID: <code>{guide_id}</code>\n\n"
+        "Шаг 2/5: Введите эмодзи для гайда (или отправьте '-' чтобы пропустить):",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_guides")]
         ])
@@ -155,8 +163,8 @@ async def create_guide_emoji(message: Message, state: FSMContext):
     await message.answer(
         "💝 <b>Создание нового гайда</b>\n\n"
         f"{emoji or '💝'} {data['name']}\n"
-        f"ID: {data['guide_id']}\n\n"
-        "Шаг 4/6: Введите описание гайда:",
+        f"ID: <code>{data['guide_id']}</code>\n\n"
+        "Шаг 3/5: Введите описание гайда:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_guides")]
         ])
@@ -173,7 +181,7 @@ async def create_guide_description(message: Message, state: FSMContext):
     await message.answer(
         "💝 <b>Создание нового гайда</b>\n\n"
         f"{data.get('emoji') or '💝'} {data['name']}\n\n"
-        "Шаг 5/6: Отправьте PDF файл гайда\n"
+        "Шаг 4/5: Отправьте PDF файл гайда\n"
         "(или отправьте '-' если хотите добавить файл позже):",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_guides")]
@@ -202,7 +210,7 @@ async def create_guide_file_id(message: Message, state: FSMContext):
         "💝 <b>Создание нового гайда</b>\n\n"
         f"{data.get('emoji') or '💝'} {data['name']}\n"
         f"Файл: {'✅' if file_id else '❌'}\n\n"
-        "Шаг 6/6: Введите slug связанного курса\n"
+        "Шаг 5/5: Введите slug связанного курса\n"
         "(или отправьте '-' если гайд не связан с курсом)\n\n"
     )
     
