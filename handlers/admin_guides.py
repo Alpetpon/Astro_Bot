@@ -98,7 +98,7 @@ async def show_guides_management(callback: CallbackQuery):
     
     # Кнопка создания нового гайда
     keyboard.button(text="➕ Создать новый гайд", callback_data="create_guide_start")
-    keyboard.button(text="🔙 Назад в админ-панель", callback_data="back_to_admin")
+    keyboard.button(text="🔙 Назад в админ-панель", callback_data="admin_panel")
     keyboard.adjust(1)
     
     await callback.message.edit_text(text, reply_markup=keyboard.as_markup())
