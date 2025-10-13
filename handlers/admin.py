@@ -30,6 +30,14 @@ class CourseManagement(StatesGroup):
     editing_lesson_video = State()
 
 
+class ConsultationManagement(StatesGroup):
+    """Состояния для управления консультациями"""
+    editing_name = State()
+    editing_price = State()
+    editing_duration = State()
+    editing_description = State()
+
+
 def is_admin(user_id: int) -> bool:
     """Проверка, является ли пользователь администратором"""
     return user_id == config.ADMIN_ID
@@ -1158,4 +1166,308 @@ async def download_analytics(callback: CallbackQuery):
     
     finally:
         db.close()
+
+
+@router.callback_query(F.data == "admin_consultations")
+async def show_consultations_management(callback: CallbackQuery):
+    """Показать управление консультациями"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    db: Session = get_db()
+    
+    try:
+        consultations = db.query(Consultation).order_by(Consultation.order).all()
+        
+        if not consultations:
+            await callback.message.edit_text(
+                "🔮 <b>Консультации отсутствуют</b>\n\n"
+                "Создайте консультации через utils/admin.py",
+                reply_markup=get_back_to_admin_keyboard()
+            )
+        else:
+            buttons = []
+            for cons in consultations:
+                status_emoji = "✅" if cons.is_active else "❌"
+                price_text = f"{cons.price:,.0f} ₽" if cons.price else "Варианты"
+                buttons.append([InlineKeyboardButton(
+                    text=f"{cons.emoji} {cons.name} ({price_text}) {status_emoji}",
+                    callback_data=f"manage_consultation_{cons.id}"
+                )])
+            
+            buttons.append([InlineKeyboardButton(
+                text="◀️ Назад в админ-панель",
+                callback_data="admin_panel"
+            )])
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+            
+            await callback.message.edit_text(
+                "🔮 <b>Управление консультациями</b>\n\n"
+                "Выберите консультацию для редактирования:",
+                reply_markup=keyboard
+            )
+    
+    finally:
+        db.close()
+    
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("manage_consultation_"))
+async def manage_consultation(callback: CallbackQuery):
+    """Управление конкретной консультацией"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    cons_id = int(callback.data.split("_")[2])
+    db: Session = get_db()
+    
+    try:
+        cons = db.query(Consultation).filter(Consultation.id == cons_id).first()
+        
+        if not cons:
+            await callback.answer("Консультация не найдена", show_alert=True)
+            return
+        
+        text = f"🔮 <b>{cons.name}</b>\n\n"
+        text += f"📍 Slug: <code>{cons.slug}</code>\n"
+        text += f"💰 Цена: {cons.price:,.0f} ₽\n" if cons.price else "💰 Цена: варианты\n"
+        text += f"⏱ Длительность: {cons.duration}\n" if cons.duration else ""
+        text += f"📂 Категория: {cons.category}\n"
+        text += f"🔄 Порядок: {cons.order}\n"
+        text += f"✅ Активна: {'Да' if cons.is_active else 'Нет'}\n"
+        
+        if cons.options:
+            text += f"\n📋 Вариантов: {len(cons.options)}\n"
+            for opt in cons.options:
+                text += f"  • {opt.name}: {opt.price:,.0f} ₽\n"
+        
+        buttons = [
+            [InlineKeyboardButton(text="✏️ Изменить название", callback_data=f"edit_cons_name_{cons_id}")],
+            [InlineKeyboardButton(text="💰 Изменить цену", callback_data=f"edit_cons_price_{cons_id}")],
+            [InlineKeyboardButton(text="⏱ Изменить длительность", callback_data=f"edit_cons_duration_{cons_id}")],
+            [InlineKeyboardButton(text="📝 Изменить описание", callback_data=f"edit_cons_desc_{cons_id}")],
+            [InlineKeyboardButton(
+                text=f"{'❌ Деактивировать' if cons.is_active else '✅ Активировать'}",
+                callback_data=f"toggle_cons_{cons_id}"
+            )],
+            [InlineKeyboardButton(text="◀️ Назад к консультациям", callback_data="admin_consultations")]
+        ]
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    
+    finally:
+        db.close()
+    
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("toggle_cons_"))
+async def toggle_consultation(callback: CallbackQuery):
+    """Переключить активность консультации"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    cons_id = int(callback.data.split("_")[2])
+    db: Session = get_db()
+    
+    try:
+        cons = db.query(Consultation).filter(Consultation.id == cons_id).first()
+        cons.is_active = not cons.is_active
+        db.commit()
+        
+        await callback.answer(f"✅ Консультация {'активирована' if cons.is_active else 'деактивирована'}!")
+        
+        # Обновляем сообщение
+        await manage_consultation(callback)
+    
+    finally:
+        db.close()
+
+
+@router.callback_query(F.data.startswith("edit_cons_name_"))
+async def edit_consultation_name_start(callback: CallbackQuery, state: FSMContext):
+    """Начало редактирования названия консультации"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    cons_id = int(callback.data.split("_")[3])
+    await state.update_data(editing_cons_id=cons_id)
+    
+    db: Session = get_db()
+    try:
+        cons = db.query(Consultation).filter(Consultation.id == cons_id).first()
+        
+        cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_consultation_{cons_id}")]
+        ])
+        
+        await callback.message.edit_text(
+            f"✏️ <b>Редактирование названия консультации</b>\n\n"
+            f"Текущее название: <b>{cons.name}</b>\n\n"
+            f"Отправьте новое название:",
+            reply_markup=cancel_keyboard
+        )
+        
+        await state.set_state(ConsultationManagement.editing_name)
+    
+    finally:
+        db.close()
+    
+    await callback.answer()
+
+
+@router.message(ConsultationManagement.editing_name)
+async def edit_consultation_name_save(message: Message, state: FSMContext):
+    """Сохранение нового названия консультации"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    data = await state.get_data()
+    cons_id = data['editing_cons_id']
+    
+    db: Session = get_db()
+    try:
+        cons = db.query(Consultation).filter(Consultation.id == cons_id).first()
+        cons.name = message.text.strip()
+        db.commit()
+        
+        back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Назад к консультации", callback_data=f"manage_consultation_{cons_id}")]
+        ])
+        
+        await message.answer(
+            f"✅ Название обновлено!\n\n"
+            f"Новое название: <b>{cons.name}</b>",
+            reply_markup=back_keyboard
+        )
+    
+    finally:
+        db.close()
+        await state.clear()
+
+
+@router.callback_query(F.data.startswith("edit_cons_price_"))
+async def edit_consultation_price_start(callback: CallbackQuery, state: FSMContext):
+    """Начало редактирования цены консультации"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    cons_id = int(callback.data.split("_")[3])
+    await state.update_data(editing_cons_id=cons_id)
+    
+    db: Session = get_db()
+    try:
+        cons = db.query(Consultation).filter(Consultation.id == cons_id).first()
+        
+        cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_consultation_{cons_id}")]
+        ])
+        
+        current_price = f"{cons.price:,.0f} ₽" if cons.price else "Не указана"
+        
+        await callback.message.edit_text(
+            f"💰 <b>Редактирование цены консультации</b>\n\n"
+            f"Текущая цена: {current_price}\n\n"
+            f"Отправьте новую цену (только число):",
+            reply_markup=cancel_keyboard
+        )
+        
+        await state.set_state(ConsultationManagement.editing_price)
+    
+    finally:
+        db.close()
+    
+    await callback.answer()
+
+
+@router.message(ConsultationManagement.editing_price)
+async def edit_consultation_price_save(message: Message, state: FSMContext):
+    """Сохранение новой цены консультации"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    data = await state.get_data()
+    cons_id = data['editing_cons_id']
+    
+    try:
+        new_price = float(message.text.strip().replace(',', '.'))
+    except ValueError:
+        await message.answer("❌ Неверный формат. Введите число (например: 15000 или 15000.50)")
+        return
+    
+    db: Session = get_db()
+    try:
+        cons = db.query(Consultation).filter(Consultation.id == cons_id).first()
+        cons.price = new_price
+        db.commit()
+        
+        back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Назад к консультации", callback_data=f"manage_consultation_{cons_id}")]
+        ])
+        
+        await message.answer(
+            f"✅ Цена обновлена!\n\n"
+            f"Новая цена: {new_price:,.0f} ₽",
+            reply_markup=back_keyboard
+        )
+    
+    finally:
+        db.close()
+        await state.clear()
+
+
+@router.callback_query(F.data == "admin_guides")
+async def show_guides_management(callback: CallbackQuery):
+    """Показать управление гайдами"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    guides = config.GUIDES
+    
+    if not guides:
+        await callback.message.edit_text(
+            "💕 <b>Гайды отсутствуют</b>\n\n"
+            "Добавьте гайды в config.py",
+            reply_markup=get_back_to_admin_keyboard()
+        )
+    else:
+        text = "💕 <b>Управление гайдами</b>\n\n"
+        
+        for guide in guides:
+            has_file = "✅" if guide.get('file_id') else "❌"
+            related_course = guide.get('related_course_slug', '-')
+            
+            text += f"{guide['emoji']} <b>{guide['name']}</b>\n"
+            text += f"  ID: <code>{guide['id']}</code>\n"
+            text += f"  Файл: {has_file}\n"
+            text += f"  Связан с курсом: <code>{related_course}</code>\n\n"
+        
+        text += "\n📝 <b>Для редактирования гайдов:</b>\n"
+        text += "Отредактируйте файл <code>config.py</code> в разделе GUIDES\n\n"
+        text += "<b>Структура гайда:</b>\n"
+        text += "• <code>id</code> - уникальный ID\n"
+        text += "• <code>name</code> - название\n"
+        text += "• <code>emoji</code> - эмодзи\n"
+        text += "• <code>description</code> - описание\n"
+        text += "• <code>file_id</code> - ID файла в Telegram\n"
+        text += "• <code>related_course_slug</code> - slug связанного курса\n\n"
+        text += "💡 Для получения file_id отправьте PDF боту @raw_data_bot"
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Назад в админ-панель", callback_data="admin_panel")]
+        ])
+        
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    
+    await callback.answer()
 
