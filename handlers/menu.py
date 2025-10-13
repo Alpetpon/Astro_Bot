@@ -4,7 +4,7 @@ from aiogram.types import CallbackQuery
 from sqlalchemy.orm import Session
 
 from config import config
-from database import get_db, User
+from database import get_db, User, Guide
 from keyboards import get_main_menu_keyboard, get_back_keyboard, get_guides_list_keyboard, get_guide_keyboard, get_about_me_keyboard
 
 router = Router()
@@ -82,19 +82,20 @@ async def show_guide(callback: CallbackQuery):
     """Показать информацию о конкретном гайде"""
     guide_id = callback.data.replace("guide_", "")
     
-    # Находим гайд в конфиге
-    guide = next((g for g in config.GUIDES if g['id'] == guide_id), None)
+    # Находим гайд в БД
+    db = next(get_db())
+    guide = db.query(Guide).filter(Guide.guide_id == guide_id, Guide.is_active == True).first()
     
     if not guide:
         await callback.answer("Гайд не найден", show_alert=True)
         return
     
-    # Гайды теперь бесплатные, проверяем наличие файла
-    has_file = bool(guide.get('file_id'))
-    related_course_slug = guide.get('related_course_slug')
+    # Гайды бесплатные, проверяем наличие файла
+    has_file = bool(guide.file_id)
+    related_course_slug = guide.related_course_slug
     
     await callback.message.edit_text(
-        guide['description'],
+        guide.description or guide.name,
         reply_markup=get_guide_keyboard(guide_id, has_file, related_course_slug),
         parse_mode="Markdown"
     )
@@ -106,14 +107,15 @@ async def download_guide(callback: CallbackQuery):
     """Скачать гайд (бесплатно)"""
     guide_id = callback.data.replace("download_guide_", "")
     
-    # Находим гайд в конфиге
-    guide = next((g for g in config.GUIDES if g['id'] == guide_id), None)
+    # Находим гайд в БД
+    db = next(get_db())
+    guide = db.query(Guide).filter(Guide.guide_id == guide_id, Guide.is_active == True).first()
     
     if not guide:
         await callback.answer("Гайд не найден", show_alert=True)
         return
     
-    file_id = guide.get('file_id')
+    file_id = guide.file_id
     
     if not file_id:
         await callback.answer("Файл гайда пока не загружен. Скоро появится!", show_alert=True)
@@ -123,7 +125,7 @@ async def download_guide(callback: CallbackQuery):
         # Отправляем файл
         await callback.message.answer_document(
             document=file_id,
-            caption=f"📥 {guide['name']}\n\n🎁 Приятного изучения!"
+            caption=f"📥 {guide.name}\n\n🎁 Приятного изучения!"
         )
         await callback.answer("Гайд отправлен!")
     

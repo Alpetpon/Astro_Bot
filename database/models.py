@@ -167,6 +167,25 @@ class ConsultationOption(Base):
         return f"<ConsultationOption {self.name} - {self.price}>"
 
 
+class Guide(Base):
+    """Модель гайда"""
+    __tablename__ = 'guides'
+    
+    id = Column(Integer, primary_key=True)
+    guide_id = Column(String(100), unique=True, nullable=False)  # ID для callback
+    name = Column(String(255), nullable=False)
+    emoji = Column(String(10), nullable=True)
+    description = Column(Text, nullable=True)
+    file_id = Column(String(500), nullable=True)  # ID файла в Telegram
+    related_course_slug = Column(String(100), nullable=True)  # Связь с курсом
+    is_active = Column(Boolean, default=True)
+    order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<Guide {self.name}>"
+
+
 class Payment(Base):
     """Модель платежа"""
     __tablename__ = 'payments'

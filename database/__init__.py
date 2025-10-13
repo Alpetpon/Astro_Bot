@@ -1,4 +1,4 @@
-from .models import User, Course, Tariff, Lesson, UserProgress, Payment, Consultation, ConsultationOption, Base
+from .models import User, Course, Tariff, Lesson, UserProgress, Payment, Consultation, ConsultationOption, Guide, Base
 from .database import engine, SessionLocal, init_db, get_db
 
 __all__ = [
@@ -10,6 +10,7 @@ __all__ = [
     'Payment',
     'Consultation',
     'ConsultationOption',
+    'Guide',
     'Base',
     'engine',
     'SessionLocal',

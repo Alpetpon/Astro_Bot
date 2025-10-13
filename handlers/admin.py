@@ -12,7 +12,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
 from config import config
-from database import get_db, User, Payment, Course, Consultation, Lesson
+from database import get_db, User, Payment, Course, Consultation, Lesson, Guide
 from keyboards import get_admin_keyboard, get_back_to_admin_keyboard
 
 router = Router()
@@ -1448,53 +1448,7 @@ async def edit_consultation_price_save(message: Message, state: FSMContext):
         await state.clear()
 
 
-@router.callback_query(F.data == "admin_guides")
-async def show_guides_management(callback: CallbackQuery):
-    """Показать управление гайдами"""
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Доступ запрещен", show_alert=True)
-        return
-    
-    guides = config.GUIDES
-    
-    if not guides:
-        await callback.message.edit_text(
-            "💕 <b>Гайды отсутствуют</b>\n\n"
-            "Добавьте гайды в config.py",
-            reply_markup=get_back_to_admin_keyboard()
-        )
-    else:
-        text = "💕 <b>Управление гайдами</b>\n\n"
-        
-        for guide in guides:
-            has_file = "✅" if guide.get('file_id') else "❌"
-            related_course = guide.get('related_course_slug', '-')
-            
-            text += f"{guide['emoji']} <b>{guide['name']}</b>\n"
-            text += f"  ID: <code>{guide['id']}</code>\n"
-            text += f"  Файл: {has_file}\n"
-            text += f"  Связан с курсом: <code>{related_course}</code>\n\n"
-        
-        text += "\n📝 <b>Для создания/редактирования гайдов:</b>\n"
-        text += "Отредактируйте файл <code>config.py</code> в разделе GUIDES\n\n"
-        text += "<b>Структура гайда:</b>\n"
-        text += "• <code>id</code> - уникальный ID\n"
-        text += "• <code>name</code> - название\n"
-        text += "• <code>emoji</code> - эмодзи\n"
-        text += "• <code>description</code> - описание\n"
-        text += "• <code>file_id</code> - ID файла в Telegram\n"
-        text += "• <code>related_course_slug</code> - slug связанного курса\n\n"
-        text += "➕ <b>Для создания нового гайда:</b>\n"
-        text += "Добавьте новый словарь в список GUIDES по образцу существующих\n\n"
-        text += "💡 Для получения file_id отправьте PDF боту @raw_data_bot"
-        
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="◀️ Назад в админ-панель", callback_data="admin_panel")]
-        ])
-        
-        await callback.message.edit_text(text, reply_markup=keyboard)
-    
-    await callback.answer()
+# Управление гайдами вынесено в отдельный модуль handlers/admin_guides.py
 
 
 @router.callback_query(F.data == "create_course")

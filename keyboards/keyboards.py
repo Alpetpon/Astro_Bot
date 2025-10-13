@@ -47,14 +47,17 @@ def get_about_me_keyboard() -> InlineKeyboardMarkup:
 
 def get_guides_list_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура списка гайдов"""
-    from config import config
+    from database import get_db, Guide
     
     buttons = []
     
-    for guide in config.GUIDES:
+    db = next(get_db())
+    guides = db.query(Guide).filter(Guide.is_active == True).order_by(Guide.order).all()
+    
+    for guide in guides:
         buttons.append([InlineKeyboardButton(
-            text=f"{guide['emoji']} {guide['name']}",
-            callback_data=f"guide_{guide['id']}"
+            text=f"{guide.emoji or '💝'} {guide.name}",
+            callback_data=f"guide_{guide.guide_id}"
         )])
     
     buttons.append([InlineKeyboardButton(text="◀️ Назад в меню", callback_data="main_menu")])

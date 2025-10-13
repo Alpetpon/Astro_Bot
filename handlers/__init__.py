@@ -5,6 +5,7 @@ from .consultations import router as consultations_router
 from .cabinet import router as cabinet_router
 from .payments_handler import router as payments_router
 from .admin import router as admin_router
+from .admin_guides import router as admin_guides_router
 
 __all__ = [
     'start_router',
@@ -13,6 +14,7 @@ __all__ = [
     'consultations_router',
     'cabinet_router',
     'payments_router',
-    'admin_router'
+    'admin_router',
+    'admin_guides_router'
 ]
 
