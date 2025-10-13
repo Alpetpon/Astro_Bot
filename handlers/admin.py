@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from config import config
-from database import get_db, User, Purchase, Course, Consultation
+from database import get_db, User, Payment, Course, Consultation
 from keyboards import get_admin_keyboard, get_back_to_admin_keyboard
 
 router = Router()
@@ -58,8 +58,8 @@ async def show_stats(callback: CallbackQuery):
     try:
         # Общая статистика
         total_users = db.query(User).count()
-        total_purchases = db.query(Purchase).count()
-        total_revenue = db.query(func.sum(Purchase.amount)).scalar() or 0
+        total_purchases = db.query(Payment).count()
+        total_revenue = db.query(func.sum(Payment.amount)).scalar() or 0
         
         # Активные пользователи (за последние 7 дней)
         week_ago = datetime.utcnow() - timedelta(days=7)
@@ -69,9 +69,9 @@ async def show_stats(callback: CallbackQuery):
         new_users = db.query(User).filter(User.created_at >= week_ago).count()
         
         # Покупки за неделю
-        week_purchases = db.query(Purchase).filter(Purchase.created_at >= week_ago).count()
-        week_revenue = db.query(func.sum(Purchase.amount)).filter(
-            Purchase.created_at >= week_ago
+        week_purchases = db.query(Payment).filter(Payment.created_at >= week_ago).count()
+        week_revenue = db.query(func.sum(Payment.amount)).filter(
+            Payment.created_at >= week_ago
         ).scalar() or 0
         
         # Курсы и консультации
@@ -127,7 +127,7 @@ async def show_users(callback: CallbackQuery):
             name = user.first_name or "Без имени"
             
             # Количество покупок
-            purchases_count = len(user.purchases)
+            purchases_count = len(user.payments)
             
             users_text += f"• {name} ({username})\n"
             users_text += f"  ID: <code>{user.telegram_id}</code>\n"
@@ -156,7 +156,7 @@ async def show_purchases(callback: CallbackQuery):
     
     try:
         # Последние 10 покупок
-        purchases = db.query(Purchase).order_by(Purchase.created_at.desc()).limit(10).all()
+        purchases = db.query(Payment).order_by(Payment.created_at.desc()).limit(10).all()
         
         if not purchases:
             purchases_text = "📦 <b>Покупки отсутствуют</b>"
