@@ -16,7 +16,7 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👤 Обо мне", callback_data="about_me")],
-        [InlineKeyboardButton(text="💕 Гайд-отношения", callback_data="guide_relationships")],
+        [InlineKeyboardButton(text="💕 Гайды", callback_data="guides_list")],
         [InlineKeyboardButton(text="📚 Курсы", callback_data="courses")],
         [InlineKeyboardButton(text="📅 Записаться на консультацию", url=f"https://t.me/{config.CONSULTATION_TELEGRAM}")],
         [InlineKeyboardButton(text="🏠 Мой кабинет", callback_data="my_cabinet")]
@@ -47,12 +47,39 @@ def get_about_me_keyboard() -> InlineKeyboardMarkup:
     return keyboard
 
 
-def get_guide_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура для гайда по отношениям"""
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💳 Купить гайд (990 ₽)", callback_data="buy_guide")],
-        [InlineKeyboardButton(text="◀️ Назад в меню", callback_data="main_menu")]
+def get_guides_list_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура списка гайдов"""
+    from config import config
+    
+    buttons = []
+    
+    for guide in config.GUIDES:
+        buttons.append([InlineKeyboardButton(
+            text=f"{guide['emoji']} {guide['name']}",
+            callback_data=f"guide_{guide['id']}"
+        )])
+    
+    buttons.append([InlineKeyboardButton(text="◀️ Назад в меню", callback_data="main_menu")])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    return keyboard
+
+
+def get_guide_keyboard(guide_id: str, has_file: bool = False) -> InlineKeyboardMarkup:
+    """Клавиатура для конкретного гайда"""
+    buttons = []
+    
+    if has_file:
+        buttons.append([InlineKeyboardButton(text="📥 Скачать гайд", callback_data=f"download_guide_{guide_id}")])
+    else:
+        buttons.append([InlineKeyboardButton(text="💳 Купить гайд", callback_data=f"buy_guide_{guide_id}")])
+    
+    buttons.append([
+        InlineKeyboardButton(text="◀️ К гайдам", callback_data="guides_list"),
+        InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")
     ])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard
 
 

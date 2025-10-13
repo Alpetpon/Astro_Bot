@@ -178,7 +178,20 @@ async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
     import os
     
     try:
-        guide_file = config.GUIDE_RELATIONSHIPS_FILE
+        # Находим гайд по product_id
+        guide_id = payment.product_id
+        guide = next((g for g in config.GUIDES if g['id'] == guide_id), None)
+        
+        if not guide:
+            await callback.message.answer(
+                "✅ **Оплата успешна!**\n\n"
+                "Гайд будет отправлен вам в течение нескольких минут.\n"
+                "Если возникнут вопросы, свяжитесь с поддержкой.",
+                parse_mode="Markdown"
+            )
+            return
+        
+        guide_file = guide.get('file_id', '')
         
         if not guide_file:
             await callback.message.answer(
@@ -195,7 +208,7 @@ async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
             document = FSInputFile(guide_file)
             await callback.message.answer_document(
                 document=document,
-                caption="✅ **Оплата успешна!**\n\n💕 Ваш гайд по отношениям готов!\n\nЖелаем вам гармоничных отношений! 🌟",
+                caption=f"✅ **Оплата успешна!**\n\n{guide['emoji']} Ваш {guide['name']} готов!\n\nЖелаем вам гармоничных отношений! 🌟",
                 parse_mode="Markdown"
             )
             await callback.message.answer(
@@ -206,7 +219,7 @@ async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
             # Если file_id Telegram
             await callback.message.answer_document(
                 document=guide_file,
-                caption="✅ **Оплата успешна!**\n\n💕 Ваш гайд по отношениям готов!\n\nЖелаем вам гармоничных отношений! 🌟",
+                caption=f"✅ **Оплата успешна!**\n\n{guide['emoji']} Ваш {guide['name']} готов!\n\nЖелаем вам гармоничных отношений! 🌟",
                 parse_mode="Markdown"
             )
             await callback.message.answer(

@@ -132,6 +132,7 @@ class Payment(Base):
     payment_id = Column(String(255), unique=True, nullable=True)  # ID платежа в ЮKassa
     confirmation_url = Column(String(500), nullable=True)
     product_type = Column(String(50), default='course')  # course, guide, consultation
+    product_id = Column(String(100), nullable=True)  # ID продукта (guide_id для гайдов)
     created_at = Column(DateTime, default=datetime.utcnow)
     paid_at = Column(DateTime, nullable=True)
     
