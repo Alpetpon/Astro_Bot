@@ -73,7 +73,8 @@ async def show_guides_management(callback: CallbackQuery):
     db = get_db()
     guides = db.query(Guide).order_by(Guide.order).all()
     
-    text = "💝 <b>Управление гайдами</b>\n\n"
+    text = f"💝 <b>Управление гайдами</b>\n\n"
+    text += f"📊 Всего гайдов: {len(guides)}\n\n"
     
     if guides:
         for guide in guides:
