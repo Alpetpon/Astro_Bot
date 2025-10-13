@@ -1,11 +1,15 @@
 from datetime import datetime, timedelta
 from aiogram import Router, F
 from aiogram.filters import Command, StateFilter
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+import os
+from io import BytesIO
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
 
 from config import config
 from database import get_db, User, Payment, Course, Consultation, Lesson
@@ -110,9 +114,16 @@ async def show_stats(callback: CallbackQuery):
 • Консультаций: {total_consultations}
 """
         
+        # Кнопки с возможностью скачать Excel
+        buttons = [
+            [InlineKeyboardButton(text="📥 Скачать детальную аналитику (Excel)", callback_data="download_analytics")],
+            [InlineKeyboardButton(text="◀️ Назад в админ-панель", callback_data="admin_panel")]
+        ]
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        
         await callback.message.edit_text(
             stats_text,
-            reply_markup=get_back_to_admin_keyboard()
+            reply_markup=keyboard
         )
     
     finally:
@@ -998,4 +1009,242 @@ async def delete_lesson(callback: CallbackQuery):
         db.close()
     
     await callback.answer()
+
+
+@router.callback_query(F.data == "download_analytics")
+async def download_analytics(callback: CallbackQuery):
+    """Генерация и отправка Excel файла с аналитикой"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    await callback.answer("⏳ Генерирую файл...")
+    
+    db: Session = get_db()
+    
+    try:
+        # Создаем Excel файл
+        wb = Workbook()
+        
+        # Лист 1: Общая статистика
+        ws_stats = wb.active
+        ws_stats.title = "Общая статистика"
+        
+        # Заголовки
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF", size=12)
+        
+        ws_stats['A1'] = 'Общая статистика бота'
+        ws_stats['A1'].font = Font(bold=True, size=14)
+        ws_stats.merge_cells('A1:B1')
+        
+        row = 3
+        ws_stats[f'A{row}'] = 'Показатель'
+        ws_stats[f'B{row}'] = 'Значение'
+        ws_stats[f'A{row}'].fill = header_fill
+        ws_stats[f'B{row}'].fill = header_fill
+        ws_stats[f'A{row}'].font = header_font
+        ws_stats[f'B{row}'].font = header_font
+        
+        # Данные
+        total_users = db.query(User).count()
+        week_ago = datetime.utcnow() - timedelta(days=7)
+        month_ago = datetime.utcnow() - timedelta(days=30)
+        
+        active_week = db.query(User).filter(User.last_activity >= week_ago).count()
+        active_month = db.query(User).filter(User.last_activity >= month_ago).count()
+        new_week = db.query(User).filter(User.created_at >= week_ago).count()
+        new_month = db.query(User).filter(User.created_at >= month_ago).count()
+        
+        total_payments = db.query(Payment).filter(Payment.status == 'succeeded').count()
+        total_revenue = db.query(func.sum(Payment.amount)).filter(Payment.status == 'succeeded').scalar() or 0
+        week_payments = db.query(Payment).filter(
+            Payment.status == 'succeeded',
+            Payment.created_at >= week_ago
+        ).count()
+        week_revenue = db.query(func.sum(Payment.amount)).filter(
+            Payment.status == 'succeeded',
+            Payment.created_at >= week_ago
+        ).scalar() or 0
+        month_payments = db.query(Payment).filter(
+            Payment.status == 'succeeded',
+            Payment.created_at >= month_ago
+        ).count()
+        month_revenue = db.query(func.sum(Payment.amount)).filter(
+            Payment.status == 'succeeded',
+            Payment.created_at >= month_ago
+        ).scalar() or 0
+        
+        stats_data = [
+            ('ПОЛЬЗОВАТЕЛИ', ''),
+            ('Всего пользователей', total_users),
+            ('Активных за неделю', active_week),
+            ('Активных за месяц', active_month),
+            ('Новых за неделю', new_week),
+            ('Новых за месяц', new_month),
+            ('', ''),
+            ('ФИНАНСЫ', ''),
+            ('Всего покупок', total_payments),
+            ('Общая выручка, ₽', f'{total_revenue:,.2f}'),
+            ('Покупок за неделю', week_payments),
+            ('Выручка за неделю, ₽', f'{week_revenue:,.2f}'),
+            ('Покупок за месяц', month_payments),
+            ('Выручка за месяц, ₽', f'{month_revenue:,.2f}'),
+            ('', ''),
+            ('КОНТЕНТ', ''),
+            ('Курсов', db.query(Course).count()),
+            ('Консультаций', db.query(Consultation).count()),
+            ('Уроков', db.query(Lesson).count()),
+        ]
+        
+        row = 4
+        for label, value in stats_data:
+            ws_stats[f'A{row}'] = label
+            ws_stats[f'B{row}'] = value
+            if label and not value:
+                ws_stats[f'A{row}'].font = Font(bold=True)
+            row += 1
+        
+        # Автоширина колонок
+        ws_stats.column_dimensions['A'].width = 30
+        ws_stats.column_dimensions['B'].width = 20
+        
+        # Лист 2: Пользователи
+        ws_users = wb.create_sheet("Пользователи")
+        
+        headers = ['ID', 'Telegram ID', 'Username', 'Имя', 'Фамилия', 'Дата регистрации', 'Последняя активность', 'Покупок']
+        for col, header in enumerate(headers, 1):
+            cell = ws_users.cell(1, col, header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center')
+        
+        users = db.query(User).order_by(User.created_at.desc()).all()
+        
+        for row, user in enumerate(users, 2):
+            payments_count = db.query(Payment).filter(
+                Payment.user_id == user.id,
+                Payment.status == 'succeeded'
+            ).count()
+            
+            ws_users.cell(row, 1, user.id)
+            ws_users.cell(row, 2, user.telegram_id)
+            ws_users.cell(row, 3, user.username or '-')
+            ws_users.cell(row, 4, user.first_name or '-')
+            ws_users.cell(row, 5, user.last_name or '-')
+            ws_users.cell(row, 6, user.created_at.strftime('%d.%m.%Y %H:%M'))
+            ws_users.cell(row, 7, user.last_activity.strftime('%d.%m.%Y %H:%M') if user.last_activity else '-')
+            ws_users.cell(row, 8, payments_count)
+        
+        # Автоширина
+        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']:
+            ws_users.column_dimensions[col].width = 15
+        
+        # Лист 3: Покупки
+        ws_payments = wb.create_sheet("Покупки")
+        
+        headers = ['ID', 'Пользователь', 'Продукт', 'Сумма, ₽', 'Статус', 'Дата создания', 'Дата оплаты']
+        for col, header in enumerate(headers, 1):
+            cell = ws_payments.cell(1, col, header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center')
+        
+        payments = db.query(Payment).order_by(Payment.created_at.desc()).all()
+        
+        for row, payment in enumerate(payments, 2):
+            user = payment.user
+            username = user.username if user.username else f"{user.first_name or 'Пользователь'}"
+            
+            product_name = '-'
+            if payment.course_id:
+                course = db.query(Course).filter(Course.id == payment.course_id).first()
+                product_name = f"Курс: {course.name}" if course else "Курс"
+            elif payment.consultation_id:
+                consultation = db.query(Consultation).filter(Consultation.id == payment.consultation_id).first()
+                product_name = f"Консультация: {consultation.name}" if consultation else "Консультация"
+            
+            ws_payments.cell(row, 1, payment.id)
+            ws_payments.cell(row, 2, username)
+            ws_payments.cell(row, 3, product_name)
+            ws_payments.cell(row, 4, payment.amount)
+            ws_payments.cell(row, 5, payment.status)
+            ws_payments.cell(row, 6, payment.created_at.strftime('%d.%m.%Y %H:%M'))
+            ws_payments.cell(row, 7, payment.paid_at.strftime('%d.%m.%Y %H:%M') if payment.paid_at else '-')
+        
+        # Автоширина
+        for col, width in zip(['A', 'B', 'C', 'D', 'E', 'F', 'G'], [8, 20, 30, 12, 12, 18, 18]):
+            ws_payments.column_dimensions[col].width = width
+        
+        # Лист 4: Курсы и их популярность
+        ws_courses = wb.create_sheet("Курсы")
+        
+        headers = ['ID', 'Название', 'Уроков', 'Тарифов', 'Продаж', 'Выручка, ₽', 'Активен']
+        for col, header in enumerate(headers, 1):
+            cell = ws_courses.cell(1, col, header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center')
+        
+        courses = db.query(Course).all()
+        
+        for row, course in enumerate(courses, 2):
+            lessons_count = db.query(Lesson).filter(Lesson.course_id == course.id).count()
+            tariffs_count = len(course.tariffs)
+            
+            sales_count = db.query(Payment).filter(
+                Payment.course_id == course.id,
+                Payment.status == 'succeeded'
+            ).count()
+            
+            revenue = db.query(func.sum(Payment.amount)).filter(
+                Payment.course_id == course.id,
+                Payment.status == 'succeeded'
+            ).scalar() or 0
+            
+            ws_courses.cell(row, 1, course.id)
+            ws_courses.cell(row, 2, course.name)
+            ws_courses.cell(row, 3, lessons_count)
+            ws_courses.cell(row, 4, tariffs_count)
+            ws_courses.cell(row, 5, sales_count)
+            ws_courses.cell(row, 6, revenue)
+            ws_courses.cell(row, 7, 'Да' if course.is_active else 'Нет')
+        
+        for col, width in zip(['A', 'B', 'C', 'D', 'E', 'F', 'G'], [8, 30, 10, 10, 10, 15, 10]):
+            ws_courses.column_dimensions[col].width = width
+        
+        # Сохраняем в буфер
+        buffer = BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+        
+        # Генерируем имя файла с датой
+        filename = f"analytics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+        # Сохраняем временно
+        temp_path = f"/tmp/{filename}"
+        with open(temp_path, 'wb') as f:
+            f.write(buffer.getvalue())
+        
+        # Отправляем файл
+        await callback.message.answer_document(
+            document=FSInputFile(temp_path, filename=filename),
+            caption="📊 <b>Детальная аналитика</b>\n\n"
+                   "Файл содержит:\n"
+                   "• Общую статистику\n"
+                   "• Список всех пользователей\n"
+                   "• Все покупки\n"
+                   "• Аналитику по курсам"
+        )
+        
+        # Удаляем временный файл
+        os.remove(temp_path)
+        
+        await callback.answer("✅ Файл отправлен!")
+    
+    except Exception as e:
+        await callback.answer(f"Ошибка при генерации: {str(e)}", show_alert=True)
+    
+    finally:
+        db.close()
 
