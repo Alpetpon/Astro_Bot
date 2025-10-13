@@ -118,21 +118,72 @@ class UserProgress(Base):
         return f"<UserProgress user={self.user_id} lesson={self.lesson_id}>"
 
 
+class Consultation(Base):
+    """Модель консультационной услуги"""
+    __tablename__ = 'consultations'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False)
+    slug = Column(String(100), unique=True, nullable=False)
+    emoji = Column(String(10), nullable=True)
+    description = Column(Text, nullable=True)
+    short_description = Column(String(500), nullable=True)
+    for_whom = Column(Text, nullable=True)  # Для кого это
+    what_included = Column(Text, nullable=True)  # Что входит (JSON)
+    format_info = Column(Text, nullable=True)  # Формат работы
+    result = Column(Text, nullable=True)  # Результат на выходе
+    price = Column(Float, nullable=True)  # Базовая цена (если одна)
+    duration = Column(String(100), nullable=True)  # Длительность
+    is_active = Column(Boolean, default=True)
+    order = Column(Integer, default=0)
+    category = Column(String(50), default='consultation')  # consultation, tarot
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Связи
+    options = relationship("ConsultationOption", back_populates="consultation", cascade="all, delete-orphan")
+    
+    def __repr__(self):
+        return f"<Consultation {self.name}>"
+
+
+class ConsultationOption(Base):
+    """Модель варианта консультации (для разных цен/форматов)"""
+    __tablename__ = 'consultation_options'
+    
+    id = Column(Integer, primary_key=True)
+    consultation_id = Column(Integer, ForeignKey('consultations.id'), nullable=False)
+    name = Column(String(255), nullable=False)
+    description = Column(String(500), nullable=True)
+    price = Column(Float, nullable=False)
+    duration = Column(String(100), nullable=True)
+    features = Column(Text, nullable=True)  # JSON строка с особенностями
+    is_active = Column(Boolean, default=True)
+    order = Column(Integer, default=0)
+    
+    # Связи
+    consultation = relationship("Consultation", back_populates="options")
+    
+    def __repr__(self):
+        return f"<ConsultationOption {self.name} - {self.price}>"
+
+
 class Payment(Base):
     """Модель платежа"""
     __tablename__ = 'payments'
     
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    course_id = Column(Integer, ForeignKey('courses.id'), nullable=True)  # Может быть NULL для гайдов
-    tariff_id = Column(Integer, ForeignKey('tariffs.id'), nullable=True)  # Может быть NULL для гайдов
+    course_id = Column(Integer, ForeignKey('courses.id'), nullable=True)  # Может быть NULL для консультаций
+    tariff_id = Column(Integer, ForeignKey('tariffs.id'), nullable=True)  # Может быть NULL для консультаций
+    consultation_id = Column(Integer, ForeignKey('consultations.id'), nullable=True)  # ID консультации
+    consultation_option_id = Column(Integer, ForeignKey('consultation_options.id'), nullable=True)  # ID варианта консультации
     amount = Column(Float, nullable=False)
     currency = Column(String(10), default='RUB')
     status = Column(String(50), default='pending')  # pending, succeeded, canceled
     payment_id = Column(String(255), unique=True, nullable=True)  # ID платежа в ЮKassa
     confirmation_url = Column(String(500), nullable=True)
-    product_type = Column(String(50), default='course')  # course, guide, consultation
-    product_id = Column(String(100), nullable=True)  # ID продукта (guide_id для гайдов)
+    product_type = Column(String(50), default='course')  # course, consultation, tarot
+    product_id = Column(String(100), nullable=True)  # ID продукта
     created_at = Column(DateTime, default=datetime.utcnow)
     paid_at = Column(DateTime, nullable=True)
     

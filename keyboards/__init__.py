@@ -12,7 +12,10 @@ from .keyboards import (
     get_my_cabinet_keyboard,
     get_my_courses_keyboard,
     get_course_progress_keyboard,
-    get_lesson_keyboard
+    get_lesson_keyboard,
+    get_consultations_keyboard,
+    get_consultation_detail_keyboard,
+    get_consultation_options_keyboard
 )
 
 __all__ = [
@@ -29,6 +32,9 @@ __all__ = [
     'get_my_cabinet_keyboard',
     'get_my_courses_keyboard',
     'get_course_progress_keyboard',
-    'get_lesson_keyboard'
+    'get_lesson_keyboard',
+    'get_consultations_keyboard',
+    'get_consultation_detail_keyboard',
+    'get_consultation_options_keyboard'
 ]
 

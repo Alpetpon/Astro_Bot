@@ -12,13 +12,11 @@ def get_start_keyboard() -> InlineKeyboardMarkup:
 
 def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     """Главное меню"""
-    from config import config
-    
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👤 Обо мне", callback_data="about_me")],
         [InlineKeyboardButton(text="💕 Гайды", callback_data="guides_list")],
+        [InlineKeyboardButton(text="🔮 Консультации", callback_data="consultations")],
         [InlineKeyboardButton(text="📚 Курсы", callback_data="courses")],
-        [InlineKeyboardButton(text="📅 Записаться на консультацию", url=f"https://t.me/{config.CONSULTATION_TELEGRAM}")],
         [InlineKeyboardButton(text="🏠 Мой кабинет", callback_data="my_cabinet")]
     ])
     return keyboard
@@ -225,6 +223,69 @@ def get_lesson_keyboard(lesson_id: int, course_id: int, has_materials: bool = Fa
     
     buttons.append([
         InlineKeyboardButton(text="◀️ К курсу", callback_data=f"my_course_{course_id}")
+    ])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    return keyboard
+
+
+def get_consultations_keyboard(consultations: List) -> InlineKeyboardMarkup:
+    """Клавиатура каталога консультаций"""
+    buttons = []
+    
+    for consultation in consultations:
+        emoji = consultation.emoji if consultation.emoji else "🔮"
+        buttons.append([InlineKeyboardButton(
+            text=f"{emoji} {consultation.name}",
+            callback_data=f"consultation_{consultation.slug}"
+        )])
+    
+    buttons.append([InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    return keyboard
+
+
+def get_consultation_detail_keyboard(consultation_slug: str, show_navigation: bool = True) -> InlineKeyboardMarkup:
+    """Клавиатура карточки консультации"""
+    buttons = []
+    
+    # Навигация между разделами
+    if show_navigation:
+        buttons.append([
+            InlineKeyboardButton(text="ℹ️ Инфо", callback_data=f"consultation_info_{consultation_slug}"),
+            InlineKeyboardButton(text="📋 Что входит", callback_data=f"consultation_details_{consultation_slug}"),
+            InlineKeyboardButton(text="💰 Цены", callback_data=f"consultation_price_{consultation_slug}")
+        ])
+    
+    # Кнопка записи
+    buttons.append([
+        InlineKeyboardButton(text="✅ Записаться", callback_data=f"consultation_book_{consultation_slug}")
+    ])
+    
+    # Навигация назад
+    buttons.append([
+        InlineKeyboardButton(text="◀️ К консультациям", callback_data="consultations"),
+        InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")
+    ])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    return keyboard
+
+
+def get_consultation_options_keyboard(consultation_slug: str, options: List) -> InlineKeyboardMarkup:
+    """Клавиатура выбора варианта консультации"""
+    buttons = []
+    
+    for option in options:
+        duration_text = f" ({option.duration})" if option.duration else ""
+        buttons.append([InlineKeyboardButton(
+            text=f"{option.name}{duration_text} - {option.price:,.0f} ₽",
+            callback_data=f"consultation_option_{option.id}"
+        )])
+    
+    buttons.append([
+        InlineKeyboardButton(text="◀️ Назад", callback_data=f"consultation_{consultation_slug}")
     ])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)

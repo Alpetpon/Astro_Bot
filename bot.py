@@ -10,6 +10,7 @@ from handlers import (
     start_router,
     menu_router,
     courses_router,
+    consultations_router,
     cabinet_router,
     payments_router
 )
@@ -30,16 +31,17 @@ async def main():
     logger.info("Initializing database...")
     init_db()
     
-    # Автоматическое создание демо-курсов при первом запуске
-    from database import get_db, Course
+    # Автоматическое создание данных при первом запуске
+    from database import get_db, Course, Consultation
     db = get_db()
     try:
         courses_count = db.query(Course).count()
-        if courses_count == 0:
-            logger.info("No courses found. Creating sample courses...")
+        consultations_count = db.query(Consultation).count()
+        if courses_count == 0 or consultations_count == 0:
+            logger.info("No data found. Creating courses and consultations...")
             from utils.admin import AdminPanel
-            AdminPanel.create_sample_courses()
-            logger.info("Sample courses created successfully!")
+            AdminPanel.create_all()
+            logger.info("Data created successfully!")
     finally:
         db.close()
     
@@ -54,6 +56,7 @@ async def main():
     dp.include_router(start_router)
     dp.include_router(menu_router)
     dp.include_router(courses_router)
+    dp.include_router(consultations_router)
     dp.include_router(payments_router)
     dp.include_router(cabinet_router)
     

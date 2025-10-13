@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from database import (
     get_db, User, Course, Tariff, Payment, 
-    UserProgress, Lesson
+    UserProgress, Lesson, Consultation, ConsultationOption
 )
 from keyboards import get_payment_keyboard, get_back_keyboard
 from payments import YooKassaPayment
@@ -102,6 +102,94 @@ async def process_tariff_selection(callback: CallbackQuery):
         db.close()
 
 
+@router.callback_query(F.data.startswith("consultation_option_"))
+async def process_consultation_option_selection(callback: CallbackQuery):
+    """Обработка выбора варианта консультации и создание платежа"""
+    option_id = int(callback.data.replace("consultation_option_", ""))
+    
+    db: Session = get_db()
+    
+    try:
+        # Получаем вариант консультации
+        option = db.query(ConsultationOption).filter(ConsultationOption.id == option_id).first()
+        
+        if not option:
+            await callback.answer("Вариант не найден", show_alert=True)
+            return
+        
+        consultation = db.query(Consultation).filter(Consultation.id == option.consultation_id).first()
+        user = db.query(User).filter(User.telegram_id == callback.from_user.id).first()
+        
+        if not consultation or not user:
+            await callback.answer("Ошибка при создании платежа", show_alert=True)
+            return
+        
+        # Создаем платеж в базе
+        payment = Payment(
+            user_id=user.id,
+            consultation_id=consultation.id,
+            consultation_option_id=option.id,
+            amount=option.price,
+            status='pending',
+            product_type='consultation'
+        )
+        db.add(payment)
+        db.commit()
+        db.refresh(payment)
+        
+        # Создаем платеж в ЮKassa
+        description = f"Оплата консультации «{consultation.name}» - {option.name}"
+        
+        # Получаем информацию о боте для return_url
+        bot_info = await callback.bot.get_me()
+        return_url = f"https://t.me/{bot_info.username}" if bot_info.username else "https://t.me"
+        
+        payment_result = yookassa.create_payment(
+            amount=option.price,
+            description=description,
+            return_url=return_url
+        )
+        
+        if not payment_result:
+            payment.status = 'failed'
+            db.commit()
+            await callback.message.edit_text(
+                "❌ Ошибка при создании платежа. Попробуйте позже.",
+                reply_markup=get_back_keyboard("consultations")
+            )
+            await callback.answer()
+            return
+        
+        # Обновляем платеж данными из ЮKassa
+        payment.payment_id = payment_result['id']
+        payment.confirmation_url = payment_result['confirmation_url']
+        db.commit()
+        
+        # Формируем сообщение об оплате
+        text = f"💳 **Оплата консультации**\n\n"
+        text += f"**Услуга:** {consultation.name}\n"
+        text += f"**Вариант:** {option.name}\n"
+        if option.duration:
+            text += f"**Длительность:** {option.duration}\n"
+        text += f"**Стоимость:** {option.price:,.0f} ₽\n\n"
+        text += "Нажмите кнопку «Оплатить» для перехода на страницу оплаты.\n"
+        text += "После успешной оплаты с вами свяжется астролог для согласования времени встречи!"
+        
+        await callback.message.edit_text(
+            text,
+            reply_markup=get_payment_keyboard(payment_result['confirmation_url'], payment.id),
+            parse_mode="Markdown"
+        )
+        await callback.answer()
+    
+    except Exception as e:
+        print(f"Error in process_consultation_option_selection: {e}")
+        await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
+    
+    finally:
+        db.close()
+
+
 @router.callback_query(F.data.startswith("check_payment_"))
 async def check_payment_status(callback: CallbackQuery):
     """Проверка статуса платежа"""
@@ -136,6 +224,21 @@ async def check_payment_status(callback: CallbackQuery):
                 if payment.product_type == 'guide':
                     # Отправляем гайд
                     await send_guide_to_user(callback, payment)
+                elif payment.product_type == 'consultation':
+                    # Уведомляем об оплате консультации
+                    consultation = db.query(Consultation).filter(Consultation.id == payment.consultation_id).first()
+                    
+                    success_text = "✅ **Оплата успешна!**\n\n"
+                    success_text += f"{consultation.emoji} Консультация «{consultation.name}» оплачена!\n\n"
+                    success_text += "📞 В ближайшее время с вами свяжется астролог для согласования времени встречи.\n\n"
+                    success_text += "Спасибо за доверие! 🌟"
+                    
+                    await callback.message.edit_text(
+                        success_text,
+                        reply_markup=get_back_keyboard("main_menu", "🏠 Главное меню"),
+                        parse_mode="Markdown"
+                    )
+                    await callback.answer("✅ Оплата подтверждена!", show_alert=True)
                 else:
                     # Выдаем доступ к курсу
                     await grant_course_access(db, payment)
