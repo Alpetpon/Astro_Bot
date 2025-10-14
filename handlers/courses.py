@@ -1,11 +1,10 @@
-import json
 from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from aiogram.exceptions import TelegramBadRequest
-from sqlalchemy.orm import Session
 
-from database import get_db, Course, Tariff, User
+from database import get_db, User
+from data import get_active_courses, get_course_by_slug, get_tariff_by_id
 from keyboards import (
     get_courses_keyboard,
     get_course_detail_keyboard,
@@ -19,7 +18,7 @@ router = Router()
 @router.callback_query(F.data == "courses")
 async def show_courses_catalog(callback: CallbackQuery):
     """Показать каталог курсов"""
-    db: Session = get_db()
+    db = get_db()
     
     try:
         # Обновляем активность
@@ -28,8 +27,8 @@ async def show_courses_catalog(callback: CallbackQuery):
             user.last_activity = datetime.utcnow()
             db.commit()
         
-        # Получаем активные курсы
-        courses = db.query(Course).filter(Course.is_active == True).order_by(Course.order).all()
+        # Получаем активные курсы из JSON
+        courses = get_active_courses()
         
         if not courses:
             await callback.message.edit_text(
@@ -54,41 +53,30 @@ async def show_tariff_selection(callback: CallbackQuery):
     """Показать выбор тарифа для записи"""
     course_slug = callback.data.replace("course_register_", "")
     
-    db: Session = get_db()
+    # Получаем курс из JSON
+    course = get_course_by_slug(course_slug)
     
-    try:
-        # Получаем курс и его тарифы
-        course = db.query(Course).filter(
-            Course.slug == course_slug,
-            Course.is_active == True
-        ).first()
-        
-        if not course:
-            await callback.answer("Курс не найден", show_alert=True)
-            return
-        
-        tariffs = db.query(Tariff).filter(
-            Tariff.course_id == course.id,
-            Tariff.is_active == True
-        ).order_by(Tariff.order).all()
-        
-        if not tariffs:
-            await callback.answer("Тарифы не найдены", show_alert=True)
-            return
-        
-        text = f"📝 **Выберите тариф**\n\n"
-        text += f"Курс: {course.name}\n\n"
-        text += "Выберите подходящий вам вариант обучения:"
-        
-        await callback.message.edit_text(
-            text,
-            reply_markup=get_tariff_keyboard(course_slug, tariffs),
-            parse_mode="Markdown"
-        )
-        await callback.answer()
+    if not course:
+        await callback.answer("Курс не найден", show_alert=True)
+        return
     
-    finally:
-        db.close()
+    tariffs = course.get('tariffs', [])
+    active_tariffs = [t for t in tariffs if t.get('is_active', True)]
+    
+    if not active_tariffs:
+        await callback.answer("Тарифы не найдены", show_alert=True)
+        return
+    
+    text = f"📝 **Выберите тариф**\n\n"
+    text += f"Курс: {course['name']}\n\n"
+    text += "Выберите подходящий вам вариант обучения:"
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=get_tariff_keyboard(course_slug, active_tariffs),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("course_"))
@@ -112,72 +100,54 @@ async def show_course_detail(callback: CallbackQuery):
         course_slug = "_".join(parts[1:])
         show_about = True
     
-    db: Session = get_db()
+    # Получаем курс из JSON
+    course = get_course_by_slug(course_slug)
+    
+    if not course:
+        await callback.answer("Курс не найден", show_alert=True)
+        return
+    
+    if show_about:
+        # Показываем информацию о курсе
+        emoji = course.get('emoji', '📚')
+        text = f"{emoji} **{course['name']}**\n\n"
+        text += f"{course.get('description', '')}\n\n"
+        
+        if course.get('duration'):
+            text += f"⏱ **Длительность:** {course['duration']}\n\n"
+        
+        if course.get('program'):
+            text += "📋 **Программа:**\n"
+            for module in course['program']:
+                text += f"• {module}\n"
+    else:
+        # Показываем тарифы
+        emoji = course.get('emoji', '📚')
+        text = f"💰 **Тарифы курса «{course['name']}»**\n\n"
+        
+        tariffs = course.get('tariffs', [])
+        active_tariffs = [t for t in tariffs if t.get('is_active', True)]
+        
+        for tariff in active_tariffs:
+            support_text = "✅ С сопровождением" if tariff.get('with_support') else "📚 Самостоятельно"
+            text += f"**{tariff['name']}** - {tariff['price']} ₽\n"
+            text += f"{support_text}\n"
+            text += f"{tariff.get('description', '')}\n"
+            
+            if tariff.get('features'):
+                for feature in tariff['features']:
+                    text += f"  • {feature}\n"
+            
+            text += "\n"
     
     try:
-        # Получаем курс
-        course = db.query(Course).filter(
-            Course.slug == course_slug,
-            Course.is_active == True
-        ).first()
-        
-        if not course:
-            await callback.answer("Курс не найден", show_alert=True)
-            return
-        
-        if show_about:
-            # Показываем информацию о курсе
-            text = f"📖 **{course.name}**\n\n"
-            text += f"{course.description}\n\n"
-            
-            if course.duration:
-                text += f"⏱ **Длительность:** {course.duration}\n\n"
-            
-            if course.program:
-                text += "📋 **Программа:**\n"
-                try:
-                    program = json.loads(course.program)
-                    for module in program:
-                        text += f"• {module}\n"
-                except:
-                    text += course.program
-        else:
-            # Показываем тарифы
-            text = f"💰 **Тарифы курса «{course.name}»**\n\n"
-            
-            tariffs = db.query(Tariff).filter(
-                Tariff.course_id == course.id,
-                Tariff.is_active == True
-            ).order_by(Tariff.order).all()
-            
-            for tariff in tariffs:
-                support_text = "✅ С сопровождением" if tariff.with_support else "📚 Самостоятельно"
-                text += f"**{tariff.name}** - {tariff.price} ₽\n"
-                text += f"{support_text}\n"
-                text += f"{tariff.description}\n"
-                
-                if tariff.features:
-                    try:
-                        features = json.loads(tariff.features)
-                        for feature in features:
-                            text += f"  • {feature}\n"
-                    except:
-                        pass
-                
-                text += "\n"
-        
-        try:
-            await callback.message.edit_text(
-                text,
-                reply_markup=get_course_detail_keyboard(course_slug),
-                parse_mode="Markdown"
-            )
-        except TelegramBadRequest:
-            # Сообщение не изменилось - это нормально
-            pass
-        
-        await callback.answer()
+        await callback.message.edit_text(
+            text,
+            reply_markup=get_course_detail_keyboard(course_slug),
+            parse_mode="Markdown"
+        )
+    except TelegramBadRequest:
+        # Сообщение не изменилось - это нормально
+        pass
     
-    finally:
-        db.close()
-
+    await callback.answer()

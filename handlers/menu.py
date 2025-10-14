@@ -4,7 +4,8 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardBut
 from sqlalchemy.orm import Session
 
 from config import config
-from database import get_db, User, Guide
+from database import get_db, User
+from data import get_active_guides, get_guide_by_id
 from keyboards import get_main_menu_keyboard, get_back_keyboard, get_guides_list_keyboard, get_guide_keyboard, get_about_me_keyboard
 
 router = Router()
@@ -82,20 +83,19 @@ async def show_guide(callback: CallbackQuery):
     """Показать информацию о конкретном гайде"""
     guide_id = callback.data.replace("guide_", "")
     
-    # Находим гайд в БД
-    db = get_db()
-    guide = db.query(Guide).filter(Guide.guide_id == guide_id, Guide.is_active == True).first()
+    # Находим гайд в JSON
+    guide = get_guide_by_id(guide_id)
     
-    if not guide:
+    if not guide or not guide.get('is_active', True):
         await callback.answer("Гайд не найден", show_alert=True)
         return
     
     # Гайды бесплатные, проверяем наличие файла
-    has_file = bool(guide.file_id)
-    related_course_slug = guide.related_course_slug
+    has_file = bool(guide.get('file_id'))
+    related_course_slug = guide.get('related_course_slug')
     
     await callback.message.edit_text(
-        guide.description or guide.name,
+        guide.get('description') or guide['name'],
         reply_markup=get_guide_keyboard(guide_id, has_file, related_course_slug),
         parse_mode="Markdown"
     )
@@ -107,37 +107,34 @@ async def download_guide(callback: CallbackQuery):
     """Скачать гайд (бесплатно)"""
     guide_id = callback.data.replace("download_guide_", "")
     
-    # Находим гайд в БД
-    db = get_db()
-    guide = db.query(Guide).filter(Guide.guide_id == guide_id, Guide.is_active == True).first()
+    # Находим гайд в JSON
+    guide = get_guide_by_id(guide_id)
     
-    if not guide:
+    if not guide or not guide.get('is_active', True):
         await callback.answer("Гайд не найден", show_alert=True)
-        db.close()
         return
     
-    file_id = guide.file_id
+    file_id = guide.get('file_id')
     
     if not file_id:
         await callback.answer("Файл гайда пока не загружен. Скоро появится!", show_alert=True)
-        db.close()
         return
     
     try:
         # Отправляем файл
         await callback.message.answer_document(
             document=file_id,
-            caption=f"📥 {guide.emoji or '💝'} {guide.name}\n\n🎁 Приятного изучения!"
+            caption=f"📥 {guide.get('emoji') or '💝'} {guide['name']}\n\n🎁 Приятного изучения!"
         )
         
         # Создаем клавиатуру с кнопками
         buttons = []
         
         # Если есть связанный курс, добавляем кнопку перехода
-        if guide.related_course_slug:
+        if guide.get('related_course_slug'):
             buttons.append([InlineKeyboardButton(
                 text="📚 Перейти к курсу",
-                callback_data=f"course_{guide.related_course_slug}"
+                callback_data=f"course_{guide['related_course_slug']}"
             )])
         
         # Кнопки навигации
@@ -158,6 +155,3 @@ async def download_guide(callback: CallbackQuery):
     
     except Exception as e:
         await callback.answer(f"Ошибка при отправке: {str(e)}", show_alert=True)
-    
-    finally:
-        db.close()

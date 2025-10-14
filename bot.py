@@ -34,20 +34,14 @@ async def main():
     init_db()
     
     # Логируем состояние данных
-    from database import get_db, Guide
-    from data import get_all_courses, get_all_consultations
+    from data import get_all_courses, get_all_consultations, get_all_guides
     
-    # Статические данные из JSON
+    # Все данные теперь из JSON
     courses = get_all_courses()
     consultations = get_all_consultations()
+    guides = get_all_guides()
     
-    # Динамические данные из БД
-    db = get_db()
-    try:
-        guides_count = db.query(Guide).count()
-        logger.info(f"Data loaded: {len(courses)} courses (JSON), {len(consultations)} consultations (JSON), {guides_count} guides (DB)")
-    finally:
-        db.close()
+    logger.info(f"Data loaded: {len(courses)} courses, {len(consultations)} consultations, {len(guides)} guides (all from JSON)")
     
     # Создание бота и диспетчера
     bot = Bot(

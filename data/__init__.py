@@ -16,6 +16,13 @@ def load_json(filename: str) -> dict:
         return json.load(f)
 
 
+def save_json(filename: str, data: dict) -> None:
+    """Сохранение данных в JSON файл"""
+    filepath = os.path.join(DATA_DIR, filename)
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
 def get_all_courses() -> List[Dict]:
     """Получить все курсы"""
     data = load_json('courses.json')
@@ -88,8 +95,140 @@ def get_consultation_option(consultation_slug: str, option_id: str) -> Optional[
     return None
 
 
+def get_all_guides() -> List[Dict]:
+    """Получить все гайды из JSON"""
+    data = load_json('guides.json')
+    return data.get('guides', [])
+
+
+def get_guide_by_id(guide_id: str) -> Optional[Dict]:
+    """Получить гайд по ID"""
+    guides = get_all_guides()
+    for guide in guides:
+        if guide['id'] == guide_id:
+            return guide
+    return None
+
+
+def get_active_guides() -> List[Dict]:
+    """Получить активные гайды из JSON"""
+    guides = get_all_guides()
+    return [g for g in guides if g.get('is_active', True)]
+
+
+# ==================== Функции записи ====================
+
+def save_courses(courses: List[Dict]) -> None:
+    """Сохранить курсы в JSON"""
+    data = {'courses': courses}
+    save_json('courses.json', data)
+
+
+def save_course(course: Dict) -> None:
+    """Сохранить/обновить один курс"""
+    courses = get_all_courses()
+    
+    # Ищем существующий курс
+    found = False
+    for i, c in enumerate(courses):
+        if c['id'] == course['id']:
+            courses[i] = course
+            found = True
+            break
+    
+    # Если не найден - добавляем
+    if not found:
+        courses.append(course)
+    
+    save_courses(courses)
+
+
+def delete_course(course_id: str) -> bool:
+    """Удалить курс"""
+    courses = get_all_courses()
+    new_courses = [c for c in courses if c['id'] != course_id]
+    
+    if len(new_courses) < len(courses):
+        save_courses(new_courses)
+        return True
+    return False
+
+
+def save_consultations(consultations: List[Dict]) -> None:
+    """Сохранить консультации в JSON"""
+    data = {'consultations': consultations}
+    save_json('consultations.json', data)
+
+
+def save_consultation(consultation: Dict) -> None:
+    """Сохранить/обновить одну консультацию"""
+    consultations = get_all_consultations()
+    
+    # Ищем существующую консультацию
+    found = False
+    for i, c in enumerate(consultations):
+        if c['id'] == consultation['id']:
+            consultations[i] = consultation
+            found = True
+            break
+    
+    # Если не найдена - добавляем
+    if not found:
+        consultations.append(consultation)
+    
+    save_consultations(consultations)
+
+
+def delete_consultation(consultation_id: str) -> bool:
+    """Удалить консультацию"""
+    consultations = get_all_consultations()
+    new_consultations = [c for c in consultations if c['id'] != consultation_id]
+    
+    if len(new_consultations) < len(consultations):
+        save_consultations(new_consultations)
+        return True
+    return False
+
+
+def save_guides(guides: List[Dict]) -> None:
+    """Сохранить гайды в JSON"""
+    data = {'guides': guides}
+    save_json('guides.json', data)
+
+
+def save_guide(guide: Dict) -> None:
+    """Сохранить/обновить один гайд"""
+    guides = get_all_guides()
+    
+    # Ищем существующий гайд
+    found = False
+    for i, g in enumerate(guides):
+        if g['id'] == guide['id']:
+            guides[i] = guide
+            found = True
+            break
+    
+    # Если не найден - добавляем
+    if not found:
+        guides.append(guide)
+    
+    save_guides(guides)
+
+
+def delete_guide(guide_id: str) -> bool:
+    """Удалить гайд"""
+    guides = get_all_guides()
+    new_guides = [g for g in guides if g['id'] != guide_id]
+    
+    if len(new_guides) < len(guides):
+        save_guides(new_guides)
+        return True
+    return False
+
+
 # Для удобства экспортируем функции
 __all__ = [
+    # Чтение
     'get_all_courses',
     'get_course_by_slug',
     'get_active_courses',
@@ -99,5 +238,18 @@ __all__ = [
     'get_active_consultations',
     'get_consultations_by_category',
     'get_consultation_option',
+    'get_all_guides',
+    'get_guide_by_id',
+    'get_active_guides',
+    # Запись
+    'save_course',
+    'save_courses',
+    'delete_course',
+    'save_consultation',
+    'save_consultations',
+    'delete_consultation',
+    'save_guide',
+    'save_guides',
+    'delete_guide',
 ]
 
