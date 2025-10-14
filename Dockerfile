@@ -24,7 +24,8 @@ RUN mkdir -p /data && chmod 777 /data
 # Установка переменной окружения для Python (не создавать .pyc файлы)
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
-ENV REBUILD_DATE=2025-10-14
+ENV USE_PERSISTENT_STORAGE=true
+ENV REBUILD_DATE=2025-10-14-v2
 
 # Запуск бота
 CMD ["python", "bot.py"]

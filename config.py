@@ -30,8 +30,20 @@ class Config:
             logger.info(f"Using DATABASE_URL from environment: {db_url}")
             return db_url
         
-        # Если директория /data существует (продакшен на Amvera), используем её
-        if os.path.exists('/data') and os.path.isdir('/data'):
+        # Проверяем переменную окружения для продакшена
+        use_persistent = os.getenv('USE_PERSISTENT_STORAGE', 'false').lower() == 'true'
+        
+        # Пытаемся создать директорию /data если её нет
+        data_dir = '/data'
+        try:
+            if not os.path.exists(data_dir):
+                os.makedirs(data_dir, exist_ok=True)
+                logger.info(f"Created directory: {data_dir}")
+        except Exception as e:
+            logger.warning(f"Cannot create {data_dir}: {e}")
+        
+        # Если директория /data доступна или явно указано использовать persistent storage
+        if use_persistent or (os.path.exists(data_dir) and os.path.isdir(data_dir) and os.access(data_dir, os.W_OK)):
             db_path = 'sqlite:////data/astro_bot.db'
             logger.info(f"Using persistent storage: {db_path}")
             return db_path
