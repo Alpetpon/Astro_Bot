@@ -1,6 +1,6 @@
 from datetime import datetime
 from aiogram import Router, F
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy.orm import Session
 
 from config import config
@@ -113,21 +113,51 @@ async def download_guide(callback: CallbackQuery):
     
     if not guide:
         await callback.answer("Гайд не найден", show_alert=True)
+        db.close()
         return
     
     file_id = guide.file_id
     
     if not file_id:
         await callback.answer("Файл гайда пока не загружен. Скоро появится!", show_alert=True)
+        db.close()
         return
     
     try:
         # Отправляем файл
         await callback.message.answer_document(
             document=file_id,
-            caption=f"📥 {guide.name}\n\n🎁 Приятного изучения!"
+            caption=f"📥 {guide.emoji or '💝'} {guide.name}\n\n🎁 Приятного изучения!"
         )
+        
+        # Создаем клавиатуру с кнопками
+        buttons = []
+        
+        # Если есть связанный курс, добавляем кнопку перехода
+        if guide.related_course_slug:
+            buttons.append([InlineKeyboardButton(
+                text="📚 Перейти к курсу",
+                callback_data=f"course_{guide.related_course_slug}"
+            )])
+        
+        # Кнопки навигации
+        buttons.append([
+            InlineKeyboardButton(text="◀️ К гайдам", callback_data="guides_list"),
+            InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")
+        ])
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        
+        # Отправляем сообщение с кнопками
+        await callback.message.answer(
+            "Выберите действие:",
+            reply_markup=keyboard
+        )
+        
         await callback.answer("Гайд отправлен!")
     
     except Exception as e:
         await callback.answer(f"Ошибка при отправке: {str(e)}", show_alert=True)
+    
+    finally:
+        db.close()

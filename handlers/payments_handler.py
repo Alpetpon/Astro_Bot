@@ -1,11 +1,11 @@
 from datetime import datetime
 from aiogram import Router, F
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy.orm import Session
 
 from database import (
     get_db, User, Course, Tariff, Payment, 
-    UserProgress, Lesson, Consultation, ConsultationOption
+    UserProgress, Lesson, Consultation, ConsultationOption, Guide
 )
 from keyboards import get_payment_keyboard, get_back_keyboard
 from payments import YooKassaPayment
@@ -276,14 +276,12 @@ async def check_payment_status(callback: CallbackQuery):
 
 async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
     """Отправка гайда пользователю после оплаты"""
-    from config import config
-    from aiogram.types import FSInputFile
-    import os
+    db = get_db()
     
     try:
-        # Находим гайд по product_id
+        # Находим гайд по product_id (guide_id)
         guide_id = payment.product_id
-        guide = next((g for g in config.GUIDES if g['id'] == guide_id), None)
+        guide = db.query(Guide).filter(Guide.guide_id == guide_id).first()
         
         if not guide:
             await callback.message.answer(
@@ -294,9 +292,9 @@ async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
             )
             return
         
-        guide_file = guide.get('file_id', '')
+        file_id = guide.file_id
         
-        if not guide_file:
+        if not file_id:
             await callback.message.answer(
                 "✅ **Оплата успешна!**\n\n"
                 "Гайд будет отправлен вам в течение нескольких минут.\n"
@@ -306,29 +304,35 @@ async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
             return
         
         # Отправляем файл гайда
-        if os.path.exists(guide_file):
-            # Если это локальный файл, отправляем документ
-            document = FSInputFile(guide_file)
-            await callback.message.answer_document(
-                document=document,
-                caption=f"✅ **Оплата успешна!**\n\n{guide['emoji']} Ваш {guide['name']} готов!\n\nЖелаем вам гармоничных отношений! 🌟",
-                parse_mode="Markdown"
-            )
-            await callback.message.answer(
-                "Приятного изучения! 📖",
-                reply_markup=get_back_keyboard("main_menu", "🏠 Главное меню")
-            )
-        else:
-            # Если file_id Telegram
-            await callback.message.answer_document(
-                document=guide_file,
-                caption=f"✅ **Оплата успешна!**\n\n{guide['emoji']} Ваш {guide['name']} готов!\n\nЖелаем вам гармоничных отношений! 🌟",
-                parse_mode="Markdown"
-            )
-            await callback.message.answer(
-                "Приятного изучения! 📖",
-                reply_markup=get_back_keyboard("main_menu", "🏠 Главное меню")
-            )
+        await callback.message.answer_document(
+            document=file_id,
+            caption=f"✅ **Оплата успешна!**\n\n{guide.emoji or '💝'} Ваш {guide.name} готов!\n\nЖелаем вам успехов в изучении! 🌟",
+            parse_mode="Markdown"
+        )
+        
+        # Создаем клавиатуру с кнопками
+        buttons = []
+        
+        # Если есть связанный курс, добавляем кнопку перехода
+        if guide.related_course_slug:
+            buttons.append([InlineKeyboardButton(
+                text="📚 Перейти к курсу",
+                callback_data=f"course_{guide.related_course_slug}"
+            )])
+        
+        # Кнопки навигации
+        buttons.append([
+            InlineKeyboardButton(text="◀️ К гайдам", callback_data="guides_list"),
+            InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")
+        ])
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        
+        # Отправляем сообщение с кнопками
+        await callback.message.answer(
+            "Приятного изучения! 📖\n\nВыберите действие:",
+            reply_markup=keyboard
+        )
         
         await callback.answer("✅ Гайд отправлен!", show_alert=True)
         
@@ -340,6 +344,9 @@ async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
             parse_mode="Markdown",
             reply_markup=get_back_keyboard("main_menu", "🏠 Главное меню")
         )
+    
+    finally:
+        db.close()
 
 
 async def grant_course_access(db: Session, payment: Payment):
