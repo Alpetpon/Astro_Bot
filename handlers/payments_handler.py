@@ -1,12 +1,9 @@
 from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from sqlalchemy.orm import Session
 
-from database import (
-    get_db, User, Course, Tariff, Payment, 
-    UserProgress, Lesson, Consultation, ConsultationOption, Guide
-)
+from database import get_db, User, Payment
+from data import get_course_by_slug, get_tariff_by_id, get_consultation_by_slug, get_consultation_option, get_guide_by_id
 from keyboards import get_payment_keyboard, get_back_keyboard
 from payments import YooKassaPayment
 
@@ -17,46 +14,56 @@ yookassa = YooKassaPayment()
 @router.callback_query(F.data.startswith("tariff_"))
 async def process_tariff_selection(callback: CallbackQuery):
     """Обработка выбора тарифа и создание платежа"""
-    tariff_id = int(callback.data.replace("tariff_", ""))
+    # Формат: tariff_{course_slug}_{tariff_id}
+    parts = callback.data.split("_", 2)
+    if len(parts) < 3:
+        await callback.answer("Ошибка формата данных", show_alert=True)
+        return
     
-    db: Session = get_db()
+    course_slug = parts[1]
+    tariff_id = parts[2]
+    
+    db = get_db()
     
     try:
-        # Получаем тариф и курс
-        tariff = db.query(Tariff).filter(Tariff.id == tariff_id).first()
+        # Получаем курс и тариф из JSON
+        course = get_course_by_slug(course_slug)
+        if not course:
+            await callback.answer("Курс не найден", show_alert=True)
+            return
         
+        tariff = get_tariff_by_id(course, tariff_id)
         if not tariff:
             await callback.answer("Тариф не найден", show_alert=True)
             return
         
-        course = db.query(Course).filter(Course.id == tariff.course_id).first()
         user = db.query(User).filter(User.telegram_id == callback.from_user.id).first()
-        
-        if not course or not user:
+        if not user:
             await callback.answer("Ошибка при создании платежа", show_alert=True)
             return
         
-        # Создаем платеж в базе
+        # Создаем платеж в базе (теперь с slug вместо FK)
         payment = Payment(
             user_id=user.id,
-            course_id=course.id,
-            tariff_id=tariff.id,
-            amount=tariff.price,
-            status='pending'
+            course_slug=course_slug,
+            tariff_id=tariff_id,
+            amount=tariff['price'],
+            status='pending',
+            product_type='course'
         )
         db.add(payment)
         db.commit()
         db.refresh(payment)
         
         # Создаем платеж в ЮKassa
-        description = f"Оплата курса «{course.name}» - {tariff.name}"
+        description = f"Оплата курса «{course['name']}» - {tariff['name']}"
         
         # Получаем информацию о боте для return_url
         bot_info = await callback.bot.get_me()
         return_url = f"https://t.me/{bot_info.username}" if bot_info.username else "https://t.me"
         
         payment_result = yookassa.create_payment(
-            amount=tariff.price,
+            amount=tariff['price'],
             description=description,
             return_url=return_url
         )
@@ -77,13 +84,13 @@ async def process_tariff_selection(callback: CallbackQuery):
         db.commit()
         
         # Формируем сообщение об оплате
-        support_text = "✅ С сопровождением куратора" if tariff.with_support else "📚 Самостоятельное обучение"
+        support_text = "✅ С сопровождением куратора" if tariff.get('with_support') else "📚 Самостоятельное обучение"
         
         text = f"💳 **Оплата курса**\n\n"
-        text += f"**Курс:** {course.name}\n"
-        text += f"**Тариф:** {tariff.name}\n"
+        text += f"**Курс:** {course['name']}\n"
+        text += f"**Тариф:** {tariff['name']}\n"
         text += f"**Формат:** {support_text}\n"
-        text += f"**Стоимость:** {tariff.price} ₽\n\n"
+        text += f"**Стоимость:** {tariff['price']} ₽\n\n"
         text += "Нажмите кнопку «Оплатить» для перехода на страницу оплаты.\n"
         text += "После успешной оплаты доступ к курсу откроется автоматически!"
         
@@ -105,31 +112,40 @@ async def process_tariff_selection(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("consultation_option_"))
 async def process_consultation_option_selection(callback: CallbackQuery):
     """Обработка выбора варианта консультации и создание платежа"""
-    option_id = int(callback.data.replace("consultation_option_", ""))
+    # Формат: consultation_option_{consultation_slug}_{option_id}
+    parts = callback.data.split("_", 3)
+    if len(parts) < 4:
+        await callback.answer("Ошибка формата данных", show_alert=True)
+        return
     
-    db: Session = get_db()
+    consultation_slug = parts[2]
+    option_id = parts[3]
+    
+    db = get_db()
     
     try:
-        # Получаем вариант консультации
-        option = db.query(ConsultationOption).filter(ConsultationOption.id == option_id).first()
+        # Получаем консультацию и опцию из JSON
+        consultation = get_consultation_by_slug(consultation_slug)
+        if not consultation:
+            await callback.answer("Консультация не найдена", show_alert=True)
+            return
         
+        option = get_consultation_option(consultation, option_id)
         if not option:
             await callback.answer("Вариант не найден", show_alert=True)
             return
         
-        consultation = db.query(Consultation).filter(Consultation.id == option.consultation_id).first()
         user = db.query(User).filter(User.telegram_id == callback.from_user.id).first()
-        
-        if not consultation or not user:
+        if not user:
             await callback.answer("Ошибка при создании платежа", show_alert=True)
             return
         
-        # Создаем платеж в базе
+        # Создаем платеж в базе (теперь с slug вместо FK)
         payment = Payment(
             user_id=user.id,
-            consultation_id=consultation.id,
-            consultation_option_id=option.id,
-            amount=option.price,
+            consultation_slug=consultation_slug,
+            consultation_option_id=option_id,
+            amount=option['price'],
             status='pending',
             product_type='consultation'
         )
@@ -138,14 +154,14 @@ async def process_consultation_option_selection(callback: CallbackQuery):
         db.refresh(payment)
         
         # Создаем платеж в ЮKassa
-        description = f"Оплата консультации «{consultation.name}» - {option.name}"
+        description = f"Оплата консультации «{consultation['name']}» - {option['name']}"
         
         # Получаем информацию о боте для return_url
         bot_info = await callback.bot.get_me()
         return_url = f"https://t.me/{bot_info.username}" if bot_info.username else "https://t.me"
         
         payment_result = yookassa.create_payment(
-            amount=option.price,
+            amount=option['price'],
             description=description,
             return_url=return_url
         )
@@ -167,11 +183,11 @@ async def process_consultation_option_selection(callback: CallbackQuery):
         
         # Формируем сообщение об оплате
         text = f"💳 **Оплата консультации**\n\n"
-        text += f"**Услуга:** {consultation.name}\n"
-        text += f"**Вариант:** {option.name}\n"
-        if option.duration:
-            text += f"**Длительность:** {option.duration}\n"
-        text += f"**Стоимость:** {option.price:,.0f} ₽\n\n"
+        text += f"**Услуга:** {consultation['name']}\n"
+        text += f"**Вариант:** {option['name']}\n"
+        if option.get('duration'):
+            text += f"**Длительность:** {option['duration']}\n"
+        text += f"**Стоимость:** {option['price']:,.0f} ₽\n\n"
         text += "Нажмите кнопку «Оплатить» для перехода на страницу оплаты.\n"
         text += "После успешной оплаты с вами свяжется астролог для согласования времени встречи!"
         
@@ -195,7 +211,7 @@ async def check_payment_status(callback: CallbackQuery):
     """Проверка статуса платежа"""
     payment_id = int(callback.data.replace("check_payment_", ""))
     
-    db: Session = get_db()
+    db = get_db()
     
     try:
         # Получаем платеж из базы
@@ -226,41 +242,44 @@ async def check_payment_status(callback: CallbackQuery):
                     await send_guide_to_user(callback, payment)
                 elif payment.product_type == 'consultation':
                     # Уведомляем об оплате консультации
-                    consultation = db.query(Consultation).filter(Consultation.id == payment.consultation_id).first()
+                    consultation = get_consultation_by_slug(payment.consultation_slug)
                     
-                    success_text = "✅ **Оплата успешна!**\n\n"
-                    success_text += f"{consultation.emoji} Консультация «{consultation.name}» оплачена!\n\n"
-                    success_text += "📞 В ближайшее время с вами свяжется астролог для согласования времени встречи.\n\n"
-                    success_text += "Спасибо за доверие! 🌟"
-                    
-                    await callback.message.edit_text(
-                        success_text,
-                        reply_markup=get_back_keyboard("main_menu", "🏠 Главное меню"),
-                        parse_mode="Markdown"
-                    )
-                    await callback.answer("✅ Оплата подтверждена!", show_alert=True)
+                    if consultation:
+                        success_text = "✅ **Оплата успешна!**\n\n"
+                        success_text += f"{consultation.get('emoji', '🔮')} Консультация «{consultation['name']}» оплачена!\n\n"
+                        success_text += "📞 В ближайшее время с вами свяжется астролог для согласования времени встречи.\n\n"
+                        success_text += "Спасибо за доверие! 🌟"
+                        
+                        await callback.message.edit_text(
+                            success_text,
+                            reply_markup=get_back_keyboard("main_menu", "🏠 Главное меню"),
+                            parse_mode="Markdown"
+                        )
+                        await callback.answer("✅ Оплата подтверждена!", show_alert=True)
+                    else:
+                        await callback.answer("✅ Оплата подтверждена!", show_alert=True)
                 else:
-                    # Выдаем доступ к курсу
-                    await grant_course_access(db, payment)
+                    # Курс оплачен
+                    course = get_course_by_slug(payment.course_slug)
+                    tariff = get_tariff_by_id(course, payment.tariff_id) if course else None
                     
-                    # Уведомляем пользователя
-                    course = db.query(Course).filter(Course.id == payment.course_id).first()
-                    tariff = db.query(Tariff).filter(Tariff.id == payment.tariff_id).first()
-                    
-                    success_text = "✅ **Оплата успешна!**\n\n"
-                    success_text += f"Вам открыт доступ к курсу «{course.name}»\n\n"
-                    
-                    if tariff.with_support:
-                        success_text += "👨‍🏫 В ближайшее время с вами свяжется куратор.\n\n"
-                    
-                    success_text += "📚 Перейдите в «Мой кабинет» для начала обучения!"
-                    
-                    await callback.message.edit_text(
-                        success_text,
-                        reply_markup=get_back_keyboard("my_cabinet", "🏠 Мой кабинет"),
-                        parse_mode="Markdown"
-                    )
-                    await callback.answer("✅ Доступ открыт!", show_alert=True)
+                    if course:
+                        success_text = "✅ **Оплата успешна!**\n\n"
+                        success_text += f"Вам открыт доступ к курсу «{course['name']}»\n\n"
+                        
+                        if tariff and tariff.get('with_support'):
+                            success_text += "👨‍🏫 В ближайшее время с вами свяжется куратор.\n\n"
+                        
+                        success_text += "📚 Материалы курса скоро будут доступны в вашем кабинете!"
+                        
+                        await callback.message.edit_text(
+                            success_text,
+                            reply_markup=get_back_keyboard("main_menu", "🏠 Главное меню"),
+                            parse_mode="Markdown"
+                        )
+                        await callback.answer("✅ Доступ открыт!", show_alert=True)
+                    else:
+                        await callback.answer("✅ Оплата подтверждена!", show_alert=True)
             else:
                 await callback.answer("⏳ Платеж еще не обработан. Попробуйте через минуту.", show_alert=True)
         else:
@@ -276,12 +295,10 @@ async def check_payment_status(callback: CallbackQuery):
 
 async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
     """Отправка гайда пользователю после оплаты"""
-    db = get_db()
-    
     try:
-        # Находим гайд по product_id (guide_id)
+        # Находим гайд по product_id (guide_id) из JSON
         guide_id = payment.product_id
-        guide = db.query(Guide).filter(Guide.guide_id == guide_id).first()
+        guide = get_guide_by_id(guide_id)
         
         if not guide:
             await callback.message.answer(
@@ -292,7 +309,7 @@ async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
             )
             return
         
-        file_id = guide.file_id
+        file_id = guide.get('file_id')
         
         if not file_id:
             await callback.message.answer(
@@ -306,7 +323,7 @@ async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
         # Отправляем файл гайда
         await callback.message.answer_document(
             document=file_id,
-            caption=f"✅ **Оплата успешна!**\n\n{guide.emoji or '💝'} Ваш {guide.name} готов!\n\nЖелаем вам успехов в изучении! 🌟",
+            caption=f"✅ **Оплата успешна!**\n\n{guide.get('emoji') or '💝'} Ваш {guide['name']} готов!\n\nЖелаем вам успехов в изучении! 🌟",
             parse_mode="Markdown"
         )
         
@@ -314,10 +331,10 @@ async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
         buttons = []
         
         # Если есть связанный курс, добавляем кнопку перехода
-        if guide.related_course_slug:
+        if guide.get('related_course_slug'):
             buttons.append([InlineKeyboardButton(
                 text="📚 Перейти к курсу",
-                callback_data=f"course_{guide.related_course_slug}"
+                callback_data=f"course_{guide['related_course_slug']}"
             )])
         
         # Кнопки навигации
@@ -344,37 +361,3 @@ async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
             parse_mode="Markdown",
             reply_markup=get_back_keyboard("main_menu", "🏠 Главное меню")
         )
-    
-    finally:
-        db.close()
-
-
-async def grant_course_access(db: Session, payment: Payment):
-    """Выдача доступа к курсу после оплаты"""
-    try:
-        # Получаем все уроки курса
-        lessons = db.query(Lesson).filter(
-            Lesson.course_id == payment.course_id
-        ).order_by(Lesson.module_number, Lesson.lesson_number).all()
-        
-        # Создаем записи прогресса для всех уроков
-        for idx, lesson in enumerate(lessons):
-            # Первый урок первого модуля доступен сразу
-            is_available = (idx == 0)
-            
-            progress = UserProgress(
-                user_id=payment.user_id,
-                lesson_id=lesson.id,
-                course_id=payment.course_id,
-                is_available=is_available,
-                is_completed=False
-            )
-            db.add(progress)
-        
-        db.commit()
-        print(f"Access granted for user {payment.user_id} to course {payment.course_id}")
-    
-    except Exception as e:
-        print(f"Error in grant_course_access: {e}")
-        db.rollback()
-

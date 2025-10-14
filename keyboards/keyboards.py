@@ -46,18 +46,20 @@ def get_about_me_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_guides_list_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура списка гайдов"""
-    from database import get_db, Guide
+    """Клавиатура списка гайдов (работает с JSON)"""
+    from data import get_active_guides
     
     buttons = []
     
-    db = get_db()
-    guides = db.query(Guide).filter(Guide.is_active == True).order_by(Guide.order).all()
+    # Получаем активные гайды из JSON
+    guides = get_active_guides()
+    # Сортируем по порядку
+    guides_sorted = sorted(guides, key=lambda g: g.get('order', 0))
     
-    for guide in guides:
+    for guide in guides_sorted:
         buttons.append([InlineKeyboardButton(
-            text=f"{guide.emoji or '💝'} {guide.name}",
-            callback_data=f"guide_{guide.guide_id}"
+            text=f"{guide.get('emoji') or '💝'} {guide['name']}",
+            callback_data=f"guide_{guide['id']}"
         )])
     
     buttons.append([InlineKeyboardButton(text="◀️ Назад в меню", callback_data="main_menu")])
@@ -90,13 +92,18 @@ def get_guide_keyboard(guide_id: str, has_file: bool = False, related_course_slu
 
 
 def get_courses_keyboard(courses: List) -> InlineKeyboardMarkup:
-    """Клавиатура каталога курсов"""
+    """Клавиатура каталога курсов (работает с JSON dict)"""
     buttons = []
     
     for course in courses:
+        # Поддерживаем как объекты БД, так и словари
+        name = course.get('name') if isinstance(course, dict) else course.name
+        slug = course.get('slug') if isinstance(course, dict) else course.slug
+        emoji = course.get('emoji', '📚') if isinstance(course, dict) else getattr(course, 'emoji', '📚')
+        
         buttons.append([InlineKeyboardButton(
-            text=course.name,
-            callback_data=f"course_{course.slug}"
+            text=f"{emoji} {name}",
+            callback_data=f"course_{slug}"
         )])
     
     buttons.append([InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")])
@@ -132,14 +139,26 @@ def get_course_detail_keyboard(course_slug: str, show_navigation: bool = True) -
 
 
 def get_tariff_keyboard(course_slug: str, tariffs: List) -> InlineKeyboardMarkup:
-    """Клавиатура выбора тарифа"""
+    """Клавиатура выбора тарифа (работает с JSON dict)"""
     buttons = []
     
     for tariff in tariffs:
-        support_emoji = "👨‍🏫" if tariff.with_support else "📚"
+        # Поддерживаем как объекты БД, так и словари
+        if isinstance(tariff, dict):
+            with_support = tariff.get('with_support', False)
+            name = tariff.get('name', '')
+            price = tariff.get('price', 0)
+            tariff_id = tariff.get('id', '')
+        else:
+            with_support = tariff.with_support
+            name = tariff.name
+            price = tariff.price
+            tariff_id = tariff.id
+        
+        support_emoji = "👨‍🏫" if with_support else "📚"
         buttons.append([InlineKeyboardButton(
-            text=f"{support_emoji} {tariff.name} - {tariff.price} ₽",
-            callback_data=f"tariff_{tariff.id}"
+            text=f"{support_emoji} {name} - {price} ₽",
+            callback_data=f"tariff_{course_slug}_{tariff_id}"
         )])
     
     buttons.append([
@@ -238,14 +257,23 @@ def get_lesson_keyboard(lesson_id: int, course_id: int, has_materials: bool = Fa
 
 
 def get_consultations_keyboard(consultations: List) -> InlineKeyboardMarkup:
-    """Клавиатура каталога консультаций"""
+    """Клавиатура каталога консультаций (работает с JSON dict)"""
     buttons = []
     
     for consultation in consultations:
-        emoji = consultation.emoji if consultation.emoji else "🔮"
+        # Поддерживаем как объекты БД, так и словари
+        if isinstance(consultation, dict):
+            emoji = consultation.get('emoji', '🔮')
+            name = consultation.get('name', '')
+            slug = consultation.get('slug', '')
+        else:
+            emoji = consultation.emoji if consultation.emoji else "🔮"
+            name = consultation.name
+            slug = consultation.slug
+        
         buttons.append([InlineKeyboardButton(
-            text=f"{emoji} {consultation.name}",
-            callback_data=f"consultation_{consultation.slug}"
+            text=f"{emoji} {name}",
+            callback_data=f"consultation_{slug}"
         )])
     
     buttons.append([InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")])
@@ -282,14 +310,26 @@ def get_consultation_detail_keyboard(consultation_slug: str, show_navigation: bo
 
 
 def get_consultation_options_keyboard(consultation_slug: str, options: List) -> InlineKeyboardMarkup:
-    """Клавиатура выбора варианта консультации"""
+    """Клавиатура выбора варианта консультации (работает с JSON dict)"""
     buttons = []
     
     for option in options:
-        duration_text = f" ({option.duration})" if option.duration else ""
+        # Поддерживаем как объекты БД, так и словари
+        if isinstance(option, dict):
+            name = option.get('name', '')
+            duration = option.get('duration')
+            price = option.get('price', 0)
+            option_id = option.get('id', '')
+        else:
+            name = option.name
+            duration = option.duration
+            price = option.price
+            option_id = option.id
+        
+        duration_text = f" ({duration})" if duration else ""
         buttons.append([InlineKeyboardButton(
-            text=f"{option.name}{duration_text} - {option.price:,.0f} ₽",
-            callback_data=f"consultation_option_{option.id}"
+            text=f"{name}{duration_text} - {price:,.0f} ₽",
+            callback_data=f"consultation_option_{consultation_slug}_{option_id}"
         )])
     
     buttons.append([
