@@ -19,12 +19,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Создание директории для постоянных данных (будет смонтирована в /data на Amvera)
-RUN mkdir -p /data
+RUN mkdir -p /data && chmod 777 /data
 
 # Установка переменной окружения для Python (не создавать .pyc файлы)
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
-ENV REBUILD_DATE=2025-10-10
+ENV REBUILD_DATE=2025-10-14
 
 # Запуск бота
 CMD ["python", "bot.py"]

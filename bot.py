@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 async def main():
     """Главная функция запуска бота"""
     # Инициализация базы данных
-    logger.info("Initializing database...")
+    logger.info(f"Initializing database at: {config.DATABASE_URL}")
     init_db()
     
     # Автоматическое создание данных при первом запуске

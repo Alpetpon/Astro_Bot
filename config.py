@@ -1,7 +1,10 @@
 import os
+import logging
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 class Config:
@@ -24,14 +27,19 @@ class Config:
         db_url = os.getenv('DATABASE_URL')
         
         if db_url:
+            logger.info(f"Using DATABASE_URL from environment: {db_url}")
             return db_url
         
         # Если директория /data существует (продакшен на Amvera), используем её
         if os.path.exists('/data') and os.path.isdir('/data'):
-            return 'sqlite:////data/astro_bot.db'
+            db_path = 'sqlite:////data/astro_bot.db'
+            logger.info(f"Using persistent storage: {db_path}")
+            return db_path
         
         # Иначе используем локальную директорию
-        return 'sqlite:///./astro_bot.db'
+        db_path = 'sqlite:///./astro_bot.db'
+        logger.info(f"Using local storage: {db_path}")
+        return db_path
     
     DATABASE_URL = _get_database_url()
     
