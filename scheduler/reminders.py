@@ -5,7 +5,7 @@ from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from config import config
-from database import get_db, User, UserProgress, Payment
+from database import get_db, User, Payment
 
 
 async def check_inactive_users(bot: Bot):
@@ -25,33 +25,21 @@ async def check_inactive_users(bot: Bot):
         ).all()
         
         for user in inactive_users:
-            # Проверяем, есть ли у пользователя купленные курсы
-            has_courses = db.query(Payment).filter(
+            # Проверяем, есть ли у пользователя купленные курсы или консультации
+            has_purchases = db.query(Payment).filter(
                 Payment.user_id == user.id,
                 Payment.status == 'succeeded'
             ).count() > 0
             
-            if not has_courses:
-                continue
-            
-            # Проверяем, есть ли незавершенные уроки
-            has_incomplete = db.query(UserProgress).filter(
-                and_(
-                    UserProgress.user_id == user.id,
-                    UserProgress.is_available == True,
-                    UserProgress.is_completed == False
-                )
-            ).count() > 0
-            
-            if has_incomplete:
+            if has_purchases:
                 # Отправляем напоминание
                 try:
                     message = (
                         "👋 Привет!\n\n"
-                        "Заметили, что вы давно не заходили на курс.\n"
-                        "У вас есть доступные уроки для изучения! 📚\n\n"
-                        "Продолжайте обучение, чтобы достичь лучших результатов! ✨\n\n"
-                        "Нажмите /start для входа в бот."
+                        "Давно не виделись! Как ваши успехи в изучении астропсихологии?\n\n"
+                        "📚 Не забывайте про ваши материалы!\n"
+                        "✨ Регулярная практика - ключ к успеху!\n\n"
+                        "Нажмите /start чтобы продолжить обучение."
                     )
                     
                     await bot.send_message(user.telegram_id, message)
@@ -81,7 +69,6 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
     )
     
     # Можно добавить другие задачи
-    # Например, напоминание о предстоящих вебинарах и т.д.
+    # Например, напоминание о предстоящих консультациях и т.д.
     
     return scheduler
-

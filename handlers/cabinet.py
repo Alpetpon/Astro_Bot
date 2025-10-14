@@ -1,19 +1,18 @@
 from datetime import datetime
 from aiogram import Router, F
-from aiogram.types import CallbackQuery
-from sqlalchemy.orm import Session
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 from database import get_db, User, Payment
-from data import get_course_by_slug, get_consultation_by_slug
 from keyboards import get_back_keyboard
+from data import get_course_by_slug, get_consultation_by_slug
 
 router = Router()
 
 
 @router.callback_query(F.data == "my_cabinet")
 async def show_my_cabinet(callback: CallbackQuery):
-    """Показать личный кабинет с оплаченными курсами и консультациями"""
-    db: Session = get_db()
+    """Показать личный кабинет"""
+    db = get_db()
     
     try:
         # Обновляем активность
@@ -22,70 +21,86 @@ async def show_my_cabinet(callback: CallbackQuery):
             user.last_activity = datetime.utcnow()
             db.commit()
         
-        if not user:
-            await callback.answer("Пользователь не найден", show_alert=True)
-            return
+        # Получаем информацию о пользователе
+        username = callback.from_user.username or "не указан"
+        first_name = callback.from_user.first_name or ""
         
-        # Получаем все успешные платежи пользователя
+        # Проверяем платежи
         payments = db.query(Payment).filter(
             Payment.user_id == user.id,
             Payment.status == 'succeeded'
-        ).order_by(Payment.paid_at.desc()).all()
+        ).all()
         
-        # Формируем сообщение
-        text = "🏠 **Мой кабинет**\n\n"
+        # Считаем статистику
+        courses_count = len([p for p in payments if p.product_type == 'course'])
+        consultations_count = len([p for p in payments if p.product_type == 'consultation'])
+        guides_count = len([p for p in payments if p.product_type == 'guide'])
+        total_spent = sum(p.amount for p in payments)
         
-        if not payments:
-            text += "У вас пока нет оплаченных курсов или консультаций.\n\n"
-            text += "📚 Выберите интересующий курс или консультацию в главном меню!"
-        else:
-            # Группируем по типам
-            courses_slugs = set()
-            consultations_slugs = set()
-            guides_count = 0
+        # Формируем текст
+        text = f"🏠 <b>Мой кабинет</b>\n\n"
+        text += f"👤 <b>{first_name}</b>\n"
+        text += f"🆔 @{username}\n"
+        text += f"📅 Дата регистрации: {user.created_at.strftime('%d.%m.%Y')}\n\n"
+        
+        text += "📊 <b>Моя статистика:</b>\n"
+        text += f"📚 Курсов: {courses_count}\n"
+        text += f"🔮 Консультаций: {consultations_count}\n"
+        text += f"💝 Гайдов: {guides_count}\n"
+        text += f"💰 Всего потрачено: {total_spent:,.0f} ₽\n\n"
+        
+        # Создаём клавиатуру
+        buttons = []
+        
+        if payments:
+            text += "💳 <b>Мои покупки:</b>\n\n"
             
-            for payment in payments:
-                if payment.product_type == 'course' and payment.course_slug:
-                    courses_slugs.add(payment.course_slug)
-                elif payment.product_type == 'consultation' and payment.consultation_slug:
-                    consultations_slugs.add(payment.consultation_slug)
-                elif payment.product_type == 'guide':
-                    guides_count += 1
+            # Группируем покупки по типу
+            courses = [p for p in payments if p.product_type == 'course']
+            consultations = [p for p in payments if p.product_type == 'consultation']
             
-            # Показываем курсы
-            if courses_slugs:
-                text += "📚 **Мои курсы:**\n\n"
-                for slug in courses_slugs:
-                    course = get_course_by_slug(slug)
+            if courses:
+                text += "📚 <b>Курсы:</b>\n"
+                for payment in courses:
+                    course = get_course_by_slug(payment.course_slug)
                     if course:
+                        course_name = course.get('name', payment.course_slug)
                         emoji = course.get('emoji', '📚')
-                        text += f"{emoji} {course['name']}\n"
-                    else:
-                        text += f"📚 {slug}\n"
+                        text += f"• {emoji} {course_name}\n"
+                        # Добавляем кнопку для перехода к курсу
+                        buttons.append([InlineKeyboardButton(
+                            text=f"{emoji} {course_name}",
+                            callback_data=f"course_{payment.course_slug}"
+                        )])
                 text += "\n"
             
-            # Показываем консультации
-            if consultations_slugs:
-                text += "🔮 **Мои консультации:**\n\n"
-                for slug in consultations_slugs:
-                    consultation = get_consultation_by_slug(slug)
+            if consultations:
+                text += "🔮 <b>Консультации:</b>\n"
+                for payment in consultations:
+                    consultation = get_consultation_by_slug(payment.consultation_slug)
                     if consultation:
+                        consultation_name = consultation.get('name', payment.consultation_slug)
                         emoji = consultation.get('emoji', '🔮')
-                        text += f"{emoji} {consultation['name']}\n"
-                    else:
-                        text += f"🔮 {slug}\n"
+                        text += f"• {emoji} {consultation_name}\n"
+                        paid_date = payment.paid_at.strftime('%d.%m.%Y') if payment.paid_at else "недавно"
+                        text += f"  Оплачено: {paid_date}\n"
                 text += "\n"
+        else:
+            text += "📚 У вас пока нет купленных курсов или консультаций.\n\n"
+            text += "Перейдите в каталог, чтобы выбрать подходящий курс!"
             
-            # Показываем гайды
-            if guides_count > 0:
-                text += f"💝 **Гайды:** {guides_count} шт.\n\n"
-            
-            text += "📩 Если у вас есть вопросы, свяжитесь с поддержкой через @username"
+            # Добавляем кнопки для перехода к каталогам
+            buttons.append([InlineKeyboardButton(text="📚 Каталог курсов", callback_data="courses")])
+            buttons.append([InlineKeyboardButton(text="🔮 Консультации", callback_data="consultations")])
+            buttons.append([InlineKeyboardButton(text="💕 Гайды", callback_data="guides_list")])
+        
+        # Кнопка назад
+        buttons.append([InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")])
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
         
         await callback.message.edit_text(
             text,
-            reply_markup=get_back_keyboard("main_menu", "🏠 В меню"),
-            parse_mode="Markdown"
+            reply_markup=keyboard
         )
         await callback.answer()
     
@@ -95,3 +110,28 @@ async def show_my_cabinet(callback: CallbackQuery):
     
     finally:
         db.close()
+
+
+# Заглушки для других обработчиков кабинета (на будущее)
+
+@router.callback_query(F.data == "my_courses")
+async def show_my_courses(callback: CallbackQuery):
+    """Показать мои курсы (заглушка)"""
+    await callback.message.edit_text(
+        "📚 <b>Мои курсы</b>\n\n"
+        "🔧 Раздел находится в разработке.\n"
+        "Скоро здесь появятся ваши курсы с доступом к урокам!",
+        reply_markup=get_back_keyboard("my_cabinet", "◀️ В кабинет")
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("my_course_"))
+async def show_my_course(callback: CallbackQuery):
+    """Показать конкретный курс (заглушка)"""
+    await callback.message.edit_text(
+        "📖 <b>Курс</b>\n\n"
+        "🔧 Раздел находится в разработке.",
+        reply_markup=get_back_keyboard("my_courses", "◀️ К курсам")
+    )
+    await callback.answer()

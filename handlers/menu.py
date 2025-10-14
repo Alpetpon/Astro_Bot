@@ -23,11 +23,19 @@ async def show_main_menu(callback: CallbackQuery):
             user.last_activity = datetime.utcnow()
             db.commit()
         
-        await callback.message.edit_text(
-            "🏠 **Главное меню**\n\nВыберите интересующий раздел:",
-            reply_markup=get_main_menu_keyboard(),
-            parse_mode="Markdown"
-        )
+        try:
+            await callback.message.edit_text(
+                "🏠 **Главное меню**\n\nВыберите интересующий раздел:",
+                reply_markup=get_main_menu_keyboard(),
+                parse_mode="Markdown"
+            )
+        except Exception:
+            # Если не можем отредактировать, отправляем новое сообщение
+            await callback.message.answer(
+                "🏠 **Главное меню**\n\nВыберите интересующий раздел:",
+                reply_markup=get_main_menu_keyboard(),
+                parse_mode="Markdown"
+            )
         await callback.answer()
     
     finally:
@@ -70,11 +78,19 @@ async def show_guides_list(callback: CallbackQuery):
     """Показать список всех гайдов"""
     text = "💕 **Гайды**\n\nВыберите интересующий гайд:"
     
-    await callback.message.edit_text(
-        text,
-        reply_markup=get_guides_list_keyboard(),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=get_guides_list_keyboard(),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        # Если не можем отредактировать (например, сообщение с документом), отправляем новое
+        await callback.message.answer(
+            text,
+            reply_markup=get_guides_list_keyboard(),
+            parse_mode="Markdown"
+        )
     await callback.answer()
 
 
