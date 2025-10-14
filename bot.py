@@ -33,14 +33,19 @@ async def main():
     logger.info(f"Initializing database at: {config.DATABASE_URL}")
     init_db()
     
-    # Логируем состояние БД
-    from database import get_db, Course, Consultation, Guide
+    # Логируем состояние данных
+    from database import get_db, Guide
+    from data import get_all_courses, get_all_consultations
+    
+    # Статические данные из JSON
+    courses = get_all_courses()
+    consultations = get_all_consultations()
+    
+    # Динамические данные из БД
     db = get_db()
     try:
-        courses_count = db.query(Course).count()
-        consultations_count = db.query(Consultation).count()
         guides_count = db.query(Guide).count()
-        logger.info(f"Database stats: {courses_count} courses, {consultations_count} consultations, {guides_count} guides")
+        logger.info(f"Data loaded: {len(courses)} courses (JSON), {len(consultations)} consultations (JSON), {guides_count} guides (DB)")
     finally:
         db.close()
     

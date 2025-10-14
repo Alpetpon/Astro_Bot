@@ -19,156 +19,14 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     
     # Связи
-    progress = relationship("UserProgress", back_populates="user", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="user", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<User {self.telegram_id}>"
 
 
-class Course(Base):
-    """Модель курса"""
-    __tablename__ = 'courses'
-    
-    id = Column(Integer, primary_key=True)
-    name = Column(String(255), nullable=False)
-    slug = Column(String(100), unique=True, nullable=False)
-    description = Column(Text, nullable=True)
-    short_description = Column(String(500), nullable=True)
-    program = Column(Text, nullable=True)  # JSON строка с программой курса
-    duration = Column(String(100), nullable=True)
-    image_url = Column(String(500), nullable=True)
-    is_active = Column(Boolean, default=True)
-    order = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Связи
-    tariffs = relationship("Tariff", back_populates="course", cascade="all, delete-orphan")
-    lessons = relationship("Lesson", back_populates="course", cascade="all, delete-orphan")
-    
-    def __repr__(self):
-        return f"<Course {self.name}>"
-
-
-class Tariff(Base):
-    """Модель тарифа курса"""
-    __tablename__ = 'tariffs'
-    
-    id = Column(Integer, primary_key=True)
-    course_id = Column(Integer, ForeignKey('courses.id'), nullable=False)
-    name = Column(String(255), nullable=False)
-    description = Column(Text, nullable=True)
-    price = Column(Float, nullable=False)
-    with_support = Column(Boolean, default=False)
-    features = Column(Text, nullable=True)  # JSON строка с особенностями тарифа
-    is_active = Column(Boolean, default=True)
-    order = Column(Integer, default=0)
-    
-    # Связи
-    course = relationship("Course", back_populates="tariffs")
-    payments = relationship("Payment", back_populates="tariff")
-    
-    def __repr__(self):
-        return f"<Tariff {self.name} - {self.price}>"
-
-
-class Lesson(Base):
-    """Модель урока"""
-    __tablename__ = 'lessons'
-    
-    id = Column(Integer, primary_key=True)
-    course_id = Column(Integer, ForeignKey('courses.id'), nullable=False)
-    module_number = Column(Integer, nullable=False)
-    lesson_number = Column(Integer, nullable=False)
-    title = Column(String(255), nullable=False)
-    description = Column(Text, nullable=True)
-    content = Column(Text, nullable=True)  # Текстовый контент урока
-    video_url = Column(String(500), nullable=True)
-    materials = Column(Text, nullable=True)  # JSON строка с доп. материалами
-    duration = Column(String(50), nullable=True)
-    order = Column(Integer, default=0)
-    is_free = Column(Boolean, default=False)  # Бесплатный урок для ознакомления
-    
-    # Связи
-    course = relationship("Course", back_populates="lessons")
-    progress = relationship("UserProgress", back_populates="lesson", cascade="all, delete-orphan")
-    
-    def __repr__(self):
-        return f"<Lesson M{self.module_number}L{self.lesson_number} - {self.title}>"
-
-
-class UserProgress(Base):
-    """Модель прогресса пользователя"""
-    __tablename__ = 'user_progress'
-    
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    lesson_id = Column(Integer, ForeignKey('lessons.id'), nullable=False)
-    course_id = Column(Integer, ForeignKey('courses.id'), nullable=False)
-    is_completed = Column(Boolean, default=False)
-    is_available = Column(Boolean, default=False)  # Доступен ли урок
-    started_at = Column(DateTime, nullable=True)
-    completed_at = Column(DateTime, nullable=True)
-    
-    # Связи
-    user = relationship("User", back_populates="progress")
-    lesson = relationship("Lesson", back_populates="progress")
-    
-    def __repr__(self):
-        return f"<UserProgress user={self.user_id} lesson={self.lesson_id}>"
-
-
-class Consultation(Base):
-    """Модель консультационной услуги"""
-    __tablename__ = 'consultations'
-    
-    id = Column(Integer, primary_key=True)
-    name = Column(String(255), nullable=False)
-    slug = Column(String(100), unique=True, nullable=False)
-    emoji = Column(String(10), nullable=True)
-    description = Column(Text, nullable=True)
-    short_description = Column(String(500), nullable=True)
-    for_whom = Column(Text, nullable=True)  # Для кого это
-    what_included = Column(Text, nullable=True)  # Что входит (JSON)
-    format_info = Column(Text, nullable=True)  # Формат работы
-    result = Column(Text, nullable=True)  # Результат на выходе
-    price = Column(Float, nullable=True)  # Базовая цена (если одна)
-    duration = Column(String(100), nullable=True)  # Длительность
-    is_active = Column(Boolean, default=True)
-    order = Column(Integer, default=0)
-    category = Column(String(50), default='consultation')  # consultation, tarot
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Связи
-    options = relationship("ConsultationOption", back_populates="consultation", cascade="all, delete-orphan")
-    
-    def __repr__(self):
-        return f"<Consultation {self.name}>"
-
-
-class ConsultationOption(Base):
-    """Модель варианта консультации (для разных цен/форматов)"""
-    __tablename__ = 'consultation_options'
-    
-    id = Column(Integer, primary_key=True)
-    consultation_id = Column(Integer, ForeignKey('consultations.id'), nullable=False)
-    name = Column(String(255), nullable=False)
-    description = Column(String(500), nullable=True)
-    price = Column(Float, nullable=False)
-    duration = Column(String(100), nullable=True)
-    features = Column(Text, nullable=True)  # JSON строка с особенностями
-    is_active = Column(Boolean, default=True)
-    order = Column(Integer, default=0)
-    
-    # Связи
-    consultation = relationship("Consultation", back_populates="options")
-    
-    def __repr__(self):
-        return f"<ConsultationOption {self.name} - {self.price}>"
-
-
 class Guide(Base):
-    """Модель гайда"""
+    """Модель гайда (хранится в БД, создается через админку)"""
     __tablename__ = 'guides'
     
     id = Column(Integer, primary_key=True)
@@ -177,7 +35,7 @@ class Guide(Base):
     emoji = Column(String(10), nullable=True)
     description = Column(Text, nullable=True)
     file_id = Column(String(500), nullable=True)  # ID файла в Telegram
-    related_course_slug = Column(String(100), nullable=True)  # Связь с курсом
+    related_course_slug = Column(String(100), nullable=True)  # Связь с курсом из JSON
     is_active = Column(Boolean, default=True)
     order = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -192,24 +50,25 @@ class Payment(Base):
     
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    course_id = Column(Integer, ForeignKey('courses.id'), nullable=True)  # Может быть NULL для консультаций
-    tariff_id = Column(Integer, ForeignKey('tariffs.id'), nullable=True)  # Может быть NULL для консультаций
-    consultation_id = Column(Integer, ForeignKey('consultations.id'), nullable=True)  # ID консультации
-    consultation_option_id = Column(Integer, ForeignKey('consultation_options.id'), nullable=True)  # ID варианта консультации
+    
+    # Теперь храним slug/id вместо FK (данные в JSON)
+    course_slug = Column(String(100), nullable=True)  # slug курса из JSON
+    tariff_id = Column(String(100), nullable=True)  # id тарифа из JSON
+    consultation_slug = Column(String(100), nullable=True)  # slug консультации из JSON
+    consultation_option_id = Column(String(100), nullable=True)  # id опции из JSON
+    
     amount = Column(Float, nullable=False)
     currency = Column(String(10), default='RUB')
     status = Column(String(50), default='pending')  # pending, succeeded, canceled
     payment_id = Column(String(255), unique=True, nullable=True)  # ID платежа в ЮKassa
     confirmation_url = Column(String(500), nullable=True)
-    product_type = Column(String(50), default='course')  # course, consultation, tarot
-    product_id = Column(String(100), nullable=True)  # ID продукта
+    product_type = Column(String(50), default='course')  # course, consultation, tarot, guide
+    product_id = Column(String(100), nullable=True)  # ID продукта (универсальный)
     created_at = Column(DateTime, default=datetime.utcnow)
     paid_at = Column(DateTime, nullable=True)
     
     # Связи
     user = relationship("User", back_populates="payments")
-    tariff = relationship("Tariff", back_populates="payments")
     
     def __repr__(self):
         return f"<Payment {self.payment_id} - {self.status}>"
-
