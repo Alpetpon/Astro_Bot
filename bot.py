@@ -33,17 +33,14 @@ async def main():
     logger.info(f"Initializing database at: {config.DATABASE_URL}")
     init_db()
     
-    # Автоматическое создание данных при первом запуске
-    from database import get_db, Course, Consultation
+    # Логируем состояние БД
+    from database import get_db, Course, Consultation, Guide
     db = get_db()
     try:
         courses_count = db.query(Course).count()
         consultations_count = db.query(Consultation).count()
-        if courses_count == 0 or consultations_count == 0:
-            logger.info("No data found. Creating courses and consultations...")
-            from utils.admin import AdminPanel
-            AdminPanel.create_all()
-            logger.info("Data created successfully!")
+        guides_count = db.query(Guide).count()
+        logger.info(f"Database stats: {courses_count} courses, {consultations_count} consultations, {guides_count} guides")
     finally:
         db.close()
     
