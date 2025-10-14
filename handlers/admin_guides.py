@@ -406,3 +406,322 @@ async def delete_guide(callback: CallbackQuery):
     finally:
         db.close()
 
+
+# ==================== Редактирование гайда ====================
+
+@router.callback_query(F.data.startswith("edit_guide_name_"))
+async def edit_guide_name_start(callback: CallbackQuery, state: FSMContext):
+    """Начало редактирования названия гайда"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    guide_id = int(callback.data.split("_")[3])
+    db = get_db()
+    guide = db.query(Guide).filter(Guide.id == guide_id).first()
+    
+    if not guide:
+        await callback.answer("❌ Гайд не найден", show_alert=True)
+        db.close()
+        return
+    
+    await state.update_data(editing_guide_id=guide_id)
+    await state.set_state(GuideManagement.editing_name)
+    
+    await callback.message.edit_text(
+        f"✏️ <b>Редактирование названия гайда</b>\n\n"
+        f"Текущее название: {guide.name}\n\n"
+        f"Введите новое название:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_guide_{guide_id}")]
+        ])
+    )
+    await callback.answer()
+    db.close()
+
+
+@router.message(GuideManagement.editing_name)
+async def edit_guide_name_save(message: Message, state: FSMContext):
+    """Сохранение нового названия гайда"""
+    data = await state.get_data()
+    guide_id = data.get('editing_guide_id')
+    
+    db = get_db()
+    guide = db.query(Guide).filter(Guide.id == guide_id).first()
+    
+    if guide:
+        guide.name = message.text
+        db.commit()
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 К гайду", callback_data=f"manage_guide_{guide_id}")]
+        ])
+        
+        await message.answer(
+            f"✅ Название обновлено!\n\nНовое название: {message.text}",
+            reply_markup=keyboard
+        )
+    else:
+        await message.answer("❌ Гайд не найден")
+    
+    db.close()
+    await state.clear()
+
+
+@router.callback_query(F.data.startswith("edit_guide_emoji_"))
+async def edit_guide_emoji_start(callback: CallbackQuery, state: FSMContext):
+    """Начало редактирования эмодзи гайда"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    guide_id = int(callback.data.split("_")[3])
+    db = get_db()
+    guide = db.query(Guide).filter(Guide.id == guide_id).first()
+    
+    if not guide:
+        await callback.answer("❌ Гайд не найден", show_alert=True)
+        db.close()
+        return
+    
+    await state.update_data(editing_guide_id=guide_id)
+    await state.set_state(GuideManagement.editing_emoji)
+    
+    await callback.message.edit_text(
+        f"🎨 <b>Редактирование эмодзи гайда</b>\n\n"
+        f"Текущий эмодзи: {guide.emoji or '-'}\n\n"
+        f"Введите новый эмодзи (или отправьте '-' чтобы удалить):",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_guide_{guide_id}")]
+        ])
+    )
+    await callback.answer()
+    db.close()
+
+
+@router.message(GuideManagement.editing_emoji)
+async def edit_guide_emoji_save(message: Message, state: FSMContext):
+    """Сохранение нового эмодзи гайда"""
+    data = await state.get_data()
+    guide_id = data.get('editing_guide_id')
+    
+    db = get_db()
+    guide = db.query(Guide).filter(Guide.id == guide_id).first()
+    
+    if guide:
+        guide.emoji = message.text if message.text != '-' else None
+        db.commit()
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 К гайду", callback_data=f"manage_guide_{guide_id}")]
+        ])
+        
+        await message.answer(
+            f"✅ Эмодзи обновлен!\n\nНовый эмодзи: {guide.emoji or '-'}",
+            reply_markup=keyboard
+        )
+    else:
+        await message.answer("❌ Гайд не найден")
+    
+    db.close()
+    await state.clear()
+
+
+@router.callback_query(F.data.startswith("edit_guide_desc_"))
+async def edit_guide_desc_start(callback: CallbackQuery, state: FSMContext):
+    """Начало редактирования описания гайда"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    guide_id = int(callback.data.split("_")[3])
+    db = get_db()
+    guide = db.query(Guide).filter(Guide.id == guide_id).first()
+    
+    if not guide:
+        await callback.answer("❌ Гайд не найден", show_alert=True)
+        db.close()
+        return
+    
+    await state.update_data(editing_guide_id=guide_id)
+    await state.set_state(GuideManagement.editing_description)
+    
+    await callback.message.edit_text(
+        f"📝 <b>Редактирование описания гайда</b>\n\n"
+        f"Текущее описание:\n{guide.description or '-'}\n\n"
+        f"Введите новое описание:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_guide_{guide_id}")]
+        ])
+    )
+    await callback.answer()
+    db.close()
+
+
+@router.message(GuideManagement.editing_description)
+async def edit_guide_desc_save(message: Message, state: FSMContext):
+    """Сохранение нового описания гайда"""
+    data = await state.get_data()
+    guide_id = data.get('editing_guide_id')
+    
+    db = get_db()
+    guide = db.query(Guide).filter(Guide.id == guide_id).first()
+    
+    if guide:
+        guide.description = message.text
+        db.commit()
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 К гайду", callback_data=f"manage_guide_{guide_id}")]
+        ])
+        
+        await message.answer(
+            f"✅ Описание обновлено!",
+            reply_markup=keyboard
+        )
+    else:
+        await message.answer("❌ Гайд не найден")
+    
+    db.close()
+    await state.clear()
+
+
+@router.callback_query(F.data.startswith("edit_guide_file_"))
+async def edit_guide_file_start(callback: CallbackQuery, state: FSMContext):
+    """Начало редактирования файла гайда"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    guide_id = int(callback.data.split("_")[3])
+    db = get_db()
+    guide = db.query(Guide).filter(Guide.id == guide_id).first()
+    
+    if not guide:
+        await callback.answer("❌ Гайд не найден", show_alert=True)
+        db.close()
+        return
+    
+    await state.update_data(editing_guide_id=guide_id)
+    await state.set_state(GuideManagement.editing_file_id)
+    
+    file_status = "Загружен ✅" if guide.file_id else "Не загружен ❌"
+    
+    await callback.message.edit_text(
+        f"📄 <b>Редактирование файла гайда</b>\n\n"
+        f"Текущий файл: {file_status}\n\n"
+        f"Отправьте новый PDF файл или file_id\n"
+        f"(или отправьте '-' чтобы удалить файл):",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_guide_{guide_id}")]
+        ])
+    )
+    await callback.answer()
+    db.close()
+
+
+@router.message(GuideManagement.editing_file_id)
+async def edit_guide_file_save(message: Message, state: FSMContext):
+    """Сохранение нового файла гайда"""
+    data = await state.get_data()
+    guide_id = data.get('editing_guide_id')
+    
+    db = get_db()
+    guide = db.query(Guide).filter(Guide.id == guide_id).first()
+    
+    if guide:
+        if message.document:
+            guide.file_id = message.document.file_id
+        elif message.text and message.text != '-':
+            guide.file_id = message.text.strip()
+        else:
+            guide.file_id = None
+        
+        db.commit()
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 К гайду", callback_data=f"manage_guide_{guide_id}")]
+        ])
+        
+        file_status = "загружен ✅" if guide.file_id else "удален ❌"
+        await message.answer(
+            f"✅ Файл {file_status}!",
+            reply_markup=keyboard
+        )
+    else:
+        await message.answer("❌ Гайд не найден")
+    
+    db.close()
+    await state.clear()
+
+
+@router.callback_query(F.data.startswith("edit_guide_course_"))
+async def edit_guide_course_start(callback: CallbackQuery, state: FSMContext):
+    """Начало редактирования связи с курсом"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    guide_id = int(callback.data.split("_")[3])
+    db = get_db()
+    guide = db.query(Guide).filter(Guide.id == guide_id).first()
+    
+    if not guide:
+        await callback.answer("❌ Гайд не найден", show_alert=True)
+        db.close()
+        return
+    
+    # Получаем список курсов
+    courses = db.query(Course).all()
+    
+    await state.update_data(editing_guide_id=guide_id)
+    await state.set_state(GuideManagement.editing_related_course)
+    
+    text = (
+        f"🔗 <b>Редактирование связи с курсом</b>\n\n"
+        f"Текущий курс: {guide.related_course_slug or '-'}\n\n"
+        f"Введите slug курса (или '-' чтобы удалить связь)\n\n"
+    )
+    
+    if courses:
+        text += "Доступные курсы:\n"
+        for course in courses:
+            text += f"• {course.slug}\n"
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_guide_{guide_id}")]
+        ])
+    )
+    await callback.answer()
+    db.close()
+
+
+@router.message(GuideManagement.editing_related_course)
+async def edit_guide_course_save(message: Message, state: FSMContext):
+    """Сохранение новой связи с курсом"""
+    data = await state.get_data()
+    guide_id = data.get('editing_guide_id')
+    
+    db = get_db()
+    guide = db.query(Guide).filter(Guide.id == guide_id).first()
+    
+    if guide:
+        guide.related_course_slug = message.text.strip() if message.text != '-' else None
+        db.commit()
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 К гайду", callback_data=f"manage_guide_{guide_id}")]
+        ])
+        
+        await message.answer(
+            f"✅ Связь с курсом обновлена!\n\nКурс: {guide.related_course_slug or '-'}",
+            reply_markup=keyboard
+        )
+    else:
+        await message.answer("❌ Гайд не найден")
+    
+    db.close()
+    await state.clear()
+
