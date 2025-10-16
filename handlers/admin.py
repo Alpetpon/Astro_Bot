@@ -1817,8 +1817,8 @@ async def admin_create_payment_link(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(
         "💳 <b>Создание платежной ссылки</b>\n\n"
-        "Введите Telegram ID пользователя или username (с @):\n\n"
-        "<i>Например: 123456789 или @username</i>",
+        "Введите Telegram username пользователя (с @):\n\n"
+        "<i>Например: @username или 123456789</i>",
         reply_markup=get_back_to_admin_keyboard()
     )
     
