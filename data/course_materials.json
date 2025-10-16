@@ -1,0 +1,342 @@
+{
+  "materials": {
+    "astro-basics": {
+      "modules": [
+        {
+          "id": "module-1",
+          "title": "Модуль 1: Основы астрологии и натальная карта",
+          "description": "Введение в астрологию, знакомство с натальной картой и основными понятиями",
+          "order": 1,
+          "lessons": [
+            {
+              "id": "lesson-1-1",
+              "title": "Что такое астрология и как она работает",
+              "description": "Узнаете основы астрологии, её историю и практическое применение",
+              "duration": "25 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 1,
+              "materials": [
+                {
+                  "title": "Конспект урока",
+                  "type": "pdf",
+                  "file_id": ""
+                }
+              ]
+            },
+            {
+              "id": "lesson-1-2",
+              "title": "Структура натальной карты",
+              "description": "Разбираем составные части натальной карты: планеты, знаки, дома",
+              "duration": "30 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 2,
+              "materials": []
+            },
+            {
+              "id": "lesson-1-3",
+              "title": "Как составить свою натальную карту",
+              "description": "Практическое занятие: составляем вашу первую натальную карту",
+              "duration": "20 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 3,
+              "materials": [
+                {
+                  "title": "Инструкция по составлению карты",
+                  "type": "pdf",
+                  "file_id": ""
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "module-2",
+          "title": "Модуль 2: Планеты и их влияние",
+          "description": "Изучаем значение каждой планеты в астрологии и их влияние на характер",
+          "order": 2,
+          "lessons": [
+            {
+              "id": "lesson-2-1",
+              "title": "Солнце и Луна - основа личности",
+              "description": "Разбираем две главные планеты: сознание и эмоции",
+              "duration": "35 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 1,
+              "materials": []
+            },
+            {
+              "id": "lesson-2-2",
+              "title": "Меркурий, Венера и Марс",
+              "description": "Личные планеты: общение, любовь и действие",
+              "duration": "40 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 2,
+              "materials": []
+            },
+            {
+              "id": "lesson-2-3",
+              "title": "Юпитер и Сатурн - социальные планеты",
+              "description": "Планеты роста, удачи, ограничений и уроков",
+              "duration": "30 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 3,
+              "materials": []
+            }
+          ]
+        },
+        {
+          "id": "module-3",
+          "title": "Модуль 3: Дома гороскопа",
+          "description": "12 домов гороскопа и сферы жизни",
+          "order": 3,
+          "lessons": [
+            {
+              "id": "lesson-3-1",
+              "title": "Система домов в астрологии",
+              "description": "Что такое дома и как они работают",
+              "duration": "25 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 1,
+              "materials": []
+            },
+            {
+              "id": "lesson-3-2",
+              "title": "Дома 1-6: личная жизнь",
+              "description": "Разбор первых шести домов гороскопа",
+              "duration": "45 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 2,
+              "materials": []
+            },
+            {
+              "id": "lesson-3-3",
+              "title": "Дома 7-12: социальная жизнь",
+              "description": "Разбор домов отношений, карьеры и духовности",
+              "duration": "45 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 3,
+              "materials": []
+            }
+          ]
+        },
+        {
+          "id": "module-4",
+          "title": "Модуль 4: Аспекты и их толкование",
+          "description": "Взаимодействие планет через аспекты",
+          "order": 4,
+          "lessons": [
+            {
+              "id": "lesson-4-1",
+              "title": "Что такое аспекты",
+              "description": "Введение в систему аспектов",
+              "duration": "20 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 1,
+              "materials": []
+            },
+            {
+              "id": "lesson-4-2",
+              "title": "Мажорные аспекты",
+              "description": "Соединение, оппозиция, квадрат, тригон, секстиль",
+              "duration": "50 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 2,
+              "materials": []
+            }
+          ]
+        },
+        {
+          "id": "module-5",
+          "title": "Модуль 5: Интерпретация натальной карты",
+          "description": "Учимся читать и толковать натальную карту целиком",
+          "order": 5,
+          "lessons": [
+            {
+              "id": "lesson-5-1",
+              "title": "Методика анализа карты",
+              "description": "Пошаговый алгоритм чтения натальной карты",
+              "duration": "35 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 1,
+              "materials": []
+            },
+            {
+              "id": "lesson-5-2",
+              "title": "Синтез информации",
+              "description": "Как объединять разные показатели в единую картину",
+              "duration": "40 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 2,
+              "materials": []
+            }
+          ]
+        },
+        {
+          "id": "module-6",
+          "title": "Модуль 6: Практика анализа карт",
+          "description": "Разбор реальных натальных карт на практике",
+          "order": 6,
+          "lessons": [
+            {
+              "id": "lesson-6-1",
+              "title": "Разбор карты №1",
+              "description": "Практический разбор натальной карты",
+              "duration": "60 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 1,
+              "materials": []
+            },
+            {
+              "id": "lesson-6-2",
+              "title": "Разбор карты №2",
+              "description": "Практический разбор натальной карты",
+              "duration": "60 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 2,
+              "materials": []
+            },
+            {
+              "id": "lesson-6-3",
+              "title": "Финальное задание",
+              "description": "Самостоятельный анализ натальной карты",
+              "duration": "—",
+              "type": "homework",
+              "file_id": "",
+              "video_url": "",
+              "order": 3,
+              "materials": [
+                {
+                  "title": "Задание для самостоятельной работы",
+                  "type": "pdf",
+                  "file_id": ""
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "love-code": {
+      "modules": [
+        {
+          "id": "module-1",
+          "title": "Модуль 1: Венера и Марс — планеты любви",
+          "description": "Изучаем главные планеты отношений",
+          "order": 1,
+          "lessons": [
+            {
+              "id": "lesson-1-1",
+              "title": "Венера - планета любви и отношений",
+              "description": "Что говорит Венера о вашем типе любви",
+              "duration": "30 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 1,
+              "materials": []
+            },
+            {
+              "id": "lesson-1-2",
+              "title": "Марс - планета страсти и желаний",
+              "description": "Как Марс влияет на ваши отношения",
+              "duration": "30 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 2,
+              "materials": []
+            }
+          ]
+        },
+        {
+          "id": "module-2",
+          "title": "Модуль 2: Ваш тип партнёрства",
+          "description": "Определяем ваш стиль отношений по карте",
+          "order": 2,
+          "lessons": [
+            {
+              "id": "lesson-2-1",
+              "title": "7 дом - дом партнерства",
+              "description": "Что показывает 7 дом в натальной карте",
+              "duration": "35 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 1,
+              "materials": []
+            }
+          ]
+        },
+        {
+          "id": "module-3",
+          "title": "Модуль 3: Синастрия и совместимость",
+          "description": "Как астрология помогает понять совместимость",
+          "order": 3,
+          "lessons": [
+            {
+              "id": "lesson-3-1",
+              "title": "Основы синастрии",
+              "description": "Что такое синастрия и как её читать",
+              "duration": "40 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 1,
+              "materials": []
+            }
+          ]
+        },
+        {
+          "id": "module-4",
+          "title": "Модуль 4: Сценарии отношений",
+          "description": "Повторяющиеся паттерны в отношениях",
+          "order": 4,
+          "lessons": [
+            {
+              "id": "lesson-4-1",
+              "title": "Родительские сценарии в отношениях",
+              "description": "Как детство влияет на выбор партнера",
+              "duration": "45 минут",
+              "type": "video",
+              "file_id": "",
+              "video_url": "",
+              "order": 1,
+              "materials": []
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+

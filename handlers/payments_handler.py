@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -7,6 +8,7 @@ from data import get_course_by_slug, get_tariff_by_id, get_consultation_by_slug,
 from keyboards import get_payment_keyboard, get_back_keyboard
 from payments import YooKassaPayment
 
+logger = logging.getLogger(__name__)
 router = Router()
 yookassa = YooKassaPayment()
 
@@ -14,9 +16,12 @@ yookassa = YooKassaPayment()
 @router.callback_query(F.data.startswith("tariff_"))
 async def process_tariff_selection(callback: CallbackQuery):
     """Обработка выбора тарифа и создание платежа"""
+    logger.info(f"User {callback.from_user.id} selecting tariff: {callback.data}")
+    
     # Формат: tariff_{course_slug}_{tariff_id}
     parts = callback.data.split("_", 2)
     if len(parts) < 3:
+        logger.warning(f"Invalid tariff callback data format: {callback.data}")
         await callback.answer("Ошибка формата данных", show_alert=True)
         return
     
@@ -29,16 +34,19 @@ async def process_tariff_selection(callback: CallbackQuery):
         # Получаем курс и тариф из JSON
         course = get_course_by_slug(course_slug)
         if not course:
+            logger.warning(f"Course not found: {course_slug}")
             await callback.answer("Курс не найден", show_alert=True)
             return
         
-        tariff = get_tariff_by_id(course, tariff_id)
+        tariff = get_tariff_by_id(course_slug, tariff_id)
         if not tariff:
+            logger.warning(f"Tariff not found: {tariff_id} for course {course_slug}")
             await callback.answer("Тариф не найден", show_alert=True)
             return
         
         user = db.query(User).filter(User.telegram_id == callback.from_user.id).first()
         if not user:
+            logger.error(f"User not found in database: {callback.from_user.id}")
             await callback.answer("Ошибка при создании платежа", show_alert=True)
             return
         
@@ -54,6 +62,8 @@ async def process_tariff_selection(callback: CallbackQuery):
         db.add(payment)
         db.commit()
         db.refresh(payment)
+        
+        logger.info(f"Payment created in DB: {payment.id} for user {user.id}")
         
         # Создаем платеж в ЮKassa
         description = f"Оплата курса «{course['name']}» - {tariff['name']}"
@@ -71,6 +81,7 @@ async def process_tariff_selection(callback: CallbackQuery):
         if not payment_result:
             payment.status = 'failed'
             db.commit()
+            logger.error(f"Failed to create payment in YooKassa for payment {payment.id}")
             await callback.message.edit_text(
                 "❌ Ошибка при создании платежа. Попробуйте позже.",
                 reply_markup=get_back_keyboard("courses")
@@ -102,7 +113,7 @@ async def process_tariff_selection(callback: CallbackQuery):
         await callback.answer()
     
     except Exception as e:
-        print(f"Error in process_tariff_selection: {e}")
+        logger.error(f"Error in process_tariff_selection: {e}", exc_info=True)
         await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
     
     finally:
@@ -112,9 +123,12 @@ async def process_tariff_selection(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("consultation_option_"))
 async def process_consultation_option_selection(callback: CallbackQuery):
     """Обработка выбора варианта консультации и создание платежа"""
+    logger.info(f"User {callback.from_user.id} selecting consultation option: {callback.data}")
+    
     # Формат: consultation_option_{consultation_slug}_{option_id}
     parts = callback.data.split("_", 3)
     if len(parts) < 4:
+        logger.warning(f"Invalid consultation callback data format: {callback.data}")
         await callback.answer("Ошибка формата данных", show_alert=True)
         return
     
@@ -199,7 +213,7 @@ async def process_consultation_option_selection(callback: CallbackQuery):
         await callback.answer()
     
     except Exception as e:
-        print(f"Error in process_consultation_option_selection: {e}")
+        logger.error(f"Error in process_consultation_option_selection: {e}", exc_info=True)
         await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
     
     finally:
@@ -211,6 +225,8 @@ async def check_payment_status(callback: CallbackQuery):
     """Проверка статуса платежа"""
     payment_id = int(callback.data.replace("check_payment_", ""))
     
+    logger.info(f"User {callback.from_user.id} checking payment status: {payment_id}")
+    
     db = get_db()
     
     try:
@@ -218,11 +234,13 @@ async def check_payment_status(callback: CallbackQuery):
         payment = db.query(Payment).filter(Payment.id == payment_id).first()
         
         if not payment:
+            logger.warning(f"Payment {payment_id} not found in database")
             await callback.answer("Платеж не найден", show_alert=True)
             return
         
         # Если платеж уже успешен
         if payment.status == 'succeeded':
+            logger.info(f"Payment {payment_id} already succeeded")
             await callback.answer("✅ Платеж уже обработан!", show_alert=True)
             return
         
@@ -235,6 +253,8 @@ async def check_payment_status(callback: CallbackQuery):
                 payment.status = 'succeeded'
                 payment.paid_at = datetime.utcnow()
                 db.commit()
+                
+                logger.info(f"Payment {payment_id} status updated to succeeded")
                 
                 # Проверяем тип продукта
                 if payment.product_type == 'guide':
@@ -261,7 +281,7 @@ async def check_payment_status(callback: CallbackQuery):
                 else:
                     # Курс оплачен
                     course = get_course_by_slug(payment.course_slug)
-                    tariff = get_tariff_by_id(course, payment.tariff_id) if course else None
+                    tariff = get_tariff_by_id(payment.course_slug, payment.tariff_id) if course else None
                     
                     if course:
                         success_text = "✅ **Оплата успешна!**\n\n"
@@ -286,7 +306,7 @@ async def check_payment_status(callback: CallbackQuery):
             await callback.answer("❌ Ошибка проверки платежа", show_alert=True)
     
     except Exception as e:
-        print(f"Error in check_payment_status: {e}")
+        logger.error(f"Error in check_payment_status: {e}", exc_info=True)
         await callback.answer("Произошла ошибка при проверке платежа", show_alert=True)
     
     finally:
@@ -354,7 +374,7 @@ async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
         await callback.answer("✅ Гайд отправлен!", show_alert=True)
         
     except Exception as e:
-        print(f"Error sending guide: {e}")
+        logger.error(f"Error sending guide: {e}", exc_info=True)
         await callback.message.answer(
             "✅ **Оплата успешна!**\n\n"
             "Произошла ошибка при отправке файла. Пожалуйста, свяжитесь с поддержкой.",

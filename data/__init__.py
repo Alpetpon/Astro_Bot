@@ -226,18 +226,66 @@ def delete_guide(guide_id: str) -> bool:
     return False
 
 
+# ==================== Материалы курсов ====================
+
+def get_course_materials(course_slug: str) -> Optional[Dict]:
+    """Получить материалы курса"""
+    try:
+        data = load_json('course_materials.json')
+        materials = data.get('materials', {})
+        return materials.get(course_slug)
+    except Exception:
+        return None
+
+
+def get_course_modules(course_slug: str) -> List[Dict]:
+    """Получить модули курса"""
+    materials = get_course_materials(course_slug)
+    if not materials:
+        return []
+    return materials.get('modules', [])
+
+
+def get_module_by_id(course_slug: str, module_id: str) -> Optional[Dict]:
+    """Получить модуль по ID"""
+    modules = get_course_modules(course_slug)
+    for module in modules:
+        if module['id'] == module_id:
+            return module
+    return None
+
+
+def get_lesson_by_id(course_slug: str, module_id: str, lesson_id: str) -> Optional[Dict]:
+    """Получить урок по ID"""
+    module = get_module_by_id(course_slug, module_id)
+    if not module:
+        return None
+    
+    for lesson in module.get('lessons', []):
+        if lesson['id'] == lesson_id:
+            return lesson
+    return None
+
+
 # Для удобства экспортируем функции
 __all__ = [
-    # Чтение
+    # Чтение курсов
     'get_all_courses',
     'get_course_by_slug',
     'get_active_courses',
     'get_tariff_by_id',
+    # Материалы курсов
+    'get_course_materials',
+    'get_course_modules',
+    'get_module_by_id',
+    'get_lesson_by_id',
+    # Консультации
     'get_all_consultations',
     'get_consultation_by_slug',
     'get_active_consultations',
     'get_consultations_by_category',
     'get_consultation_option',
+    # Гайды
     'get_all_guides',
     'get_guide_by_id',
     'get_active_guides',
