@@ -59,6 +59,14 @@ class CourseCreation(StatesGroup):
     waiting_for_duration = State()
 
 
+class PaymentLinkCreation(StatesGroup):
+    """Состояния для создания платежной ссылки"""
+    waiting_for_user_id = State()
+    waiting_for_product_type = State()
+    waiting_for_product_selection = State()
+    waiting_for_amount = State()
+
+
 def is_admin(user_id: int) -> bool:
     """Проверка, является ли пользователь администратором"""
     return user_id == config.ADMIN_ID
@@ -1796,4 +1804,455 @@ async def create_consultation_save(message: Message, state: FSMContext):
     finally:
         db.close()
         await state.clear()
+
+
+# ==================== СОЗДАНИЕ ПЛАТЕЖНОЙ ССЫЛКИ ====================
+
+@router.callback_query(F.data == "admin_create_payment_link")
+async def admin_create_payment_link(callback: CallbackQuery, state: FSMContext):
+    """Начало создания платежной ссылки"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+    
+    await callback.message.edit_text(
+        "💳 <b>Создание платежной ссылки</b>\n\n"
+        "Введите Telegram ID пользователя или username (с @):\n\n"
+        "<i>Например: 123456789 или @username</i>",
+        reply_markup=get_back_to_admin_keyboard()
+    )
+    
+    await state.set_state(PaymentLinkCreation.waiting_for_user_id)
+    await callback.answer()
+
+
+@router.message(StateFilter(PaymentLinkCreation.waiting_for_user_id))
+async def process_user_id(message: Message, state: FSMContext):
+    """Обработка ввода ID пользователя"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    user_input = message.text.strip()
+    db = get_db()
+    
+    try:
+        # Проверяем, это ID или username
+        if user_input.startswith('@'):
+            username = user_input[1:]  # Убираем @
+            user = db.query(User).filter(User.telegram_username == username).first()
+        else:
+            try:
+                telegram_id = int(user_input)
+                user = db.query(User).filter(User.telegram_id == telegram_id).first()
+            except ValueError:
+                await message.answer("❌ Неверный формат. Введите числовой ID или username с @")
+                return
+        
+        if not user:
+            await message.answer(
+                "❌ Пользователь не найден в базе.\n\n"
+                "Убедитесь, что пользователь хотя бы раз запускал бота."
+            )
+            return
+        
+        # Сохраняем данные пользователя
+        await state.update_data(
+            user_id=user.id,
+            telegram_id=user.telegram_id,
+            user_name=user.full_name or user.telegram_username or f"ID{user.telegram_id}"
+        )
+        
+        # Показываем выбор типа продукта
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔮 Консультация", callback_data="payment_link_consultation")],
+            [InlineKeyboardButton(text="📚 Курс", callback_data="payment_link_course")],
+            [InlineKeyboardButton(text="💝 Гайд", callback_data="payment_link_guide")],
+            [InlineKeyboardButton(text="◀️ Отмена", callback_data="admin")]
+        ])
+        
+        await message.answer(
+            f"✅ Пользователь найден: <b>{user.full_name or user.telegram_username}</b>\n"
+            f"ID: <code>{user.telegram_id}</code>\n\n"
+            "Выберите тип продукта:",
+            reply_markup=keyboard
+        )
+        
+        await state.set_state(PaymentLinkCreation.waiting_for_product_type)
+    
+    finally:
+        db.close()
+
+
+@router.callback_query(F.data.startswith("payment_link_"))
+async def process_product_type(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора типа продукта"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+    
+    product_type = callback.data.replace("payment_link_", "")
+    await state.update_data(product_type=product_type)
+    
+    if product_type == "consultation":
+        # Показываем список консультаций
+        consultations = get_all_consultations()
+        
+        if not consultations:
+            await callback.message.edit_text(
+                "❌ Нет доступных консультаций",
+                reply_markup=get_back_to_admin_keyboard()
+            )
+            await state.clear()
+            return
+        
+        buttons = []
+        for cons in consultations:
+            buttons.append([InlineKeyboardButton(
+                text=f"{cons.get('emoji', '🔮')} {cons['name']}",
+                callback_data=f"paylink_cons_{cons['slug']}"
+            )])
+        
+        buttons.append([InlineKeyboardButton(text="◀️ Отмена", callback_data="admin")])
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        
+        await callback.message.edit_text(
+            "🔮 Выберите консультацию:",
+            reply_markup=keyboard
+        )
+    
+    elif product_type == "course":
+        # Показываем список курсов
+        courses = get_all_courses()
+        
+        if not courses:
+            await callback.message.edit_text(
+                "❌ Нет доступных курсов",
+                reply_markup=get_back_to_admin_keyboard()
+            )
+            await state.clear()
+            return
+        
+        buttons = []
+        for course in courses:
+            buttons.append([InlineKeyboardButton(
+                text=f"{course.get('emoji', '📚')} {course['name']}",
+                callback_data=f"paylink_course_{course['slug']}"
+            )])
+        
+        buttons.append([InlineKeyboardButton(text="◀️ Отмена", callback_data="admin")])
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        
+        await callback.message.edit_text(
+            "📚 Выберите курс:",
+            reply_markup=keyboard
+        )
+    
+    else:
+        # Для гайда просим ввести сумму
+        await callback.message.edit_text(
+            "💝 Введите стоимость гайда в рублях:\n\n"
+            "<i>Например: 1000</i>",
+            reply_markup=get_back_to_admin_keyboard()
+        )
+        await state.set_state(PaymentLinkCreation.waiting_for_amount)
+    
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("paylink_cons_"))
+async def process_consultation_selection(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора консультации"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+    
+    from data import get_consultation_by_slug
+    
+    cons_slug = callback.data.replace("paylink_cons_", "")
+    consultation = get_consultation_by_slug(cons_slug)
+    
+    if not consultation:
+        await callback.answer("❌ Консультация не найдена", show_alert=True)
+        return
+    
+    await state.update_data(
+        consultation_slug=cons_slug,
+        consultation_name=consultation['name']
+    )
+    
+    # Если есть варианты - показываем их
+    options = consultation.get('options', [])
+    
+    if options:
+        buttons = []
+        for option in options:
+            if option.get('is_active', True):
+                buttons.append([InlineKeyboardButton(
+                    text=f"{option['name']} - {option['price']:,.0f} ₽",
+                    callback_data=f"paylink_option_{option['id']}"
+                )])
+        
+        buttons.append([InlineKeyboardButton(text="◀️ Отмена", callback_data="admin")])
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        
+        await callback.message.edit_text(
+            f"🔮 {consultation['name']}\n\n"
+            "Выберите вариант:",
+            reply_markup=keyboard
+        )
+    else:
+        # Нет вариантов - просим ввести сумму
+        await callback.message.edit_text(
+            f"🔮 {consultation['name']}\n\n"
+            "Введите стоимость в рублях:\n\n"
+            "<i>Например: 5000</i>",
+            reply_markup=get_back_to_admin_keyboard()
+        )
+        await state.set_state(PaymentLinkCreation.waiting_for_amount)
+    
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("paylink_option_"))
+async def process_option_selection(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора варианта консультации"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+    
+    from data import get_consultation_by_slug, get_consultation_option
+    
+    option_id = callback.data.replace("paylink_option_", "")
+    
+    data = await state.get_data()
+    consultation_slug = data.get('consultation_slug')
+    consultation = get_consultation_by_slug(consultation_slug)
+    
+    if not consultation:
+        await callback.answer("❌ Ошибка", show_alert=True)
+        return
+    
+    option = get_consultation_option(consultation_slug, option_id)
+    
+    if not option:
+        await callback.answer("❌ Вариант не найден", show_alert=True)
+        return
+    
+    await state.update_data(
+        consultation_option_id=option_id,
+        amount=option['price'],
+        option_name=option['name']
+    )
+    
+    # Создаем платеж
+    await create_payment_link(callback.message, state)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("paylink_course_"))
+async def process_course_selection(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора курса"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+    
+    from data import get_course_by_slug
+    
+    course_slug = callback.data.replace("paylink_course_", "")
+    course = get_course_by_slug(course_slug)
+    
+    if not course:
+        await callback.answer("❌ Курс не найден", show_alert=True)
+        return
+    
+    await state.update_data(
+        course_slug=course_slug,
+        course_name=course['name']
+    )
+    
+    # Показываем тарифы
+    tariffs = course.get('tariffs', [])
+    
+    if tariffs:
+        buttons = []
+        for tariff in tariffs:
+            if tariff.get('is_active', True):
+                buttons.append([InlineKeyboardButton(
+                    text=f"{tariff['name']} - {tariff['price']:,.0f} ₽",
+                    callback_data=f"paylink_tariff_{tariff['id']}"
+                )])
+        
+        buttons.append([InlineKeyboardButton(text="◀️ Отмена", callback_data="admin")])
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        
+        await callback.message.edit_text(
+            f"📚 {course['name']}\n\n"
+            "Выберите тариф:",
+            reply_markup=keyboard
+        )
+    else:
+        await callback.message.edit_text(
+            "❌ Нет доступных тарифов",
+            reply_markup=get_back_to_admin_keyboard()
+        )
+        await state.clear()
+    
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("paylink_tariff_"))
+async def process_tariff_selection(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора тарифа курса"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+    
+    from data import get_course_by_slug, get_tariff_by_id
+    
+    tariff_id = callback.data.replace("paylink_tariff_", "")
+    
+    data = await state.get_data()
+    course_slug = data.get('course_slug')
+    
+    tariff = get_tariff_by_id(course_slug, tariff_id)
+    
+    if not tariff:
+        await callback.answer("❌ Тариф не найден", show_alert=True)
+        return
+    
+    await state.update_data(
+        tariff_id=tariff_id,
+        amount=tariff['price'],
+        tariff_name=tariff['name']
+    )
+    
+    # Создаем платеж
+    await create_payment_link(callback.message, state)
+    await callback.answer()
+
+
+@router.message(StateFilter(PaymentLinkCreation.waiting_for_amount))
+async def process_amount(message: Message, state: FSMContext):
+    """Обработка ввода суммы"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    try:
+        amount = float(message.text.strip().replace(',', '.').replace(' ', ''))
+        
+        if amount <= 0:
+            await message.answer("❌ Сумма должна быть больше 0")
+            return
+        
+        await state.update_data(amount=amount)
+        
+        # Создаем платеж
+        await create_payment_link(message, state)
+    
+    except ValueError:
+        await message.answer("❌ Неверный формат суммы. Введите число (например: 5000)")
+
+
+async def create_payment_link(message: Message, state: FSMContext):
+    """Создание платежной ссылки и платежа в БД"""
+    from payments import YooKassaPayment
+    
+    data = await state.get_data()
+    
+    user_id = data.get('user_id')
+    telegram_id = data.get('telegram_id')
+    user_name = data.get('user_name')
+    product_type = data.get('product_type')
+    amount = data.get('amount')
+    
+    db = get_db()
+    
+    try:
+        # Формируем описание
+        if product_type == 'consultation':
+            description = f"Консультация: {data.get('consultation_name')}"
+            if data.get('option_name'):
+                description += f" - {data.get('option_name')}"
+        elif product_type == 'course':
+            description = f"Курс: {data.get('course_name')}"
+            if data.get('tariff_name'):
+                description += f" - {data.get('tariff_name')}"
+        else:
+            description = "Гайд"
+        
+        # Создаем платеж в БД
+        payment = Payment(
+            user_id=user_id,
+            amount=amount,
+            status='pending',
+            product_type=product_type
+        )
+        
+        if product_type == 'consultation':
+            payment.consultation_slug = data.get('consultation_slug')
+            payment.consultation_option_id = data.get('consultation_option_id')
+        elif product_type == 'course':
+            payment.course_slug = data.get('course_slug')
+            payment.tariff_id = data.get('tariff_id')
+        elif product_type == 'guide':
+            payment.product_id = data.get('guide_id', 'guide-custom')
+        
+        db.add(payment)
+        db.commit()
+        db.refresh(payment)
+        
+        # Создаем платеж в YooKassa
+        yookassa = YooKassaPayment()
+        
+        bot_info = await message.bot.get_me()
+        return_url = f"https://t.me/{bot_info.username}" if bot_info.username else "https://t.me"
+        
+        payment_result = yookassa.create_payment(
+            amount=amount,
+            description=description,
+            return_url=return_url,
+            metadata={
+                'payment_db_id': payment.id,
+                'user_telegram_id': telegram_id
+            }
+        )
+        
+        if not payment_result:
+            await message.answer(
+                "❌ Ошибка при создании платежа в YooKassa",
+                reply_markup=get_back_to_admin_keyboard()
+            )
+            payment.status = 'failed'
+            db.commit()
+            await state.clear()
+            return
+        
+        # Обновляем платеж
+        payment.payment_id = payment_result['id']
+        payment.confirmation_url = payment_result['confirmation_url']
+        db.commit()
+        
+        # Отправляем ссылку админу
+        await message.answer(
+            f"✅ <b>Платежная ссылка создана!</b>\n\n"
+            f"👤 Пользователь: {user_name}\n"
+            f"💰 Сумма: {amount:,.0f} ₽\n"
+            f"📦 Продукт: {description}\n\n"
+            f"🔗 Ссылка на оплату:\n"
+            f"<code>{payment_result['confirmation_url']}</code>\n\n"
+            f"<i>Отправьте эту ссылку пользователю для оплаты</i>",
+            reply_markup=get_back_to_admin_keyboard()
+        )
+        
+        await state.clear()
+    
+    except Exception as e:
+        await message.answer(
+            f"❌ Ошибка: {str(e)}",
+            reply_markup=get_back_to_admin_keyboard()
+        )
+        await state.clear()
+    
+    finally:
+        db.close()
 

@@ -280,6 +280,8 @@ def get_consultations_keyboard(consultations: List) -> InlineKeyboardMarkup:
 
 def get_consultation_detail_keyboard(consultation_slug: str, show_navigation: bool = True) -> InlineKeyboardMarkup:
     """Клавиатура карточки консультации"""
+    from config import config
+    
     buttons = []
     
     # Навигация между разделами
@@ -290,9 +292,12 @@ def get_consultation_detail_keyboard(consultation_slug: str, show_navigation: bo
             InlineKeyboardButton(text="💰 Цены", callback_data=f"consultation_price_{consultation_slug}")
         ])
     
-    # Кнопка записи
+    # Кнопка записи - теперь ведет в Telegram к астрологу
     buttons.append([
-        InlineKeyboardButton(text="✅ Записаться", callback_data=f"consultation_book_{consultation_slug}")
+        InlineKeyboardButton(
+            text="✅ Записаться на консультацию", 
+            url=f"https://t.me/{config.CONSULTATION_TELEGRAM}"
+        )
     ])
     
     # Навигация назад
@@ -340,6 +345,7 @@ def get_admin_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура админ-панели"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
+        [InlineKeyboardButton(text="💳 Создать ссылку на оплату", callback_data="admin_create_payment_link")],
         [InlineKeyboardButton(text="📚 Управление курсами", callback_data="admin_courses")],
         [InlineKeyboardButton(text="🔮 Управление консультациями", callback_data="admin_consultations")],
         [InlineKeyboardButton(text="💕 Управление гайдами", callback_data="admin_guides")],

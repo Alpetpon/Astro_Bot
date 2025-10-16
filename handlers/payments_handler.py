@@ -120,104 +120,11 @@ async def process_tariff_selection(callback: CallbackQuery):
         db.close()
 
 
-@router.callback_query(F.data.startswith("consultation_option_"))
-async def process_consultation_option_selection(callback: CallbackQuery):
-    """Обработка выбора варианта консультации и создание платежа"""
-    logger.info(f"User {callback.from_user.id} selecting consultation option: {callback.data}")
-    
-    # Формат: consultation_option_{consultation_slug}_{option_id}
-    parts = callback.data.split("_", 3)
-    if len(parts) < 4:
-        logger.warning(f"Invalid consultation callback data format: {callback.data}")
-        await callback.answer("Ошибка формата данных", show_alert=True)
-        return
-    
-    consultation_slug = parts[2]
-    option_id = parts[3]
-    
-    db = get_db()
-    
-    try:
-        # Получаем консультацию и опцию из JSON
-        consultation = get_consultation_by_slug(consultation_slug)
-        if not consultation:
-            await callback.answer("Консультация не найдена", show_alert=True)
-            return
-        
-        option = get_consultation_option(consultation, option_id)
-        if not option:
-            await callback.answer("Вариант не найден", show_alert=True)
-            return
-        
-        user = db.query(User).filter(User.telegram_id == callback.from_user.id).first()
-        if not user:
-            await callback.answer("Ошибка при создании платежа", show_alert=True)
-            return
-        
-        # Создаем платеж в базе (теперь с slug вместо FK)
-        payment = Payment(
-            user_id=user.id,
-            consultation_slug=consultation_slug,
-            consultation_option_id=option_id,
-            amount=option['price'],
-            status='pending',
-            product_type='consultation'
-        )
-        db.add(payment)
-        db.commit()
-        db.refresh(payment)
-        
-        # Создаем платеж в ЮKassa
-        description = f"Оплата консультации «{consultation['name']}» - {option['name']}"
-        
-        # Получаем информацию о боте для return_url
-        bot_info = await callback.bot.get_me()
-        return_url = f"https://t.me/{bot_info.username}" if bot_info.username else "https://t.me"
-        
-        payment_result = yookassa.create_payment(
-            amount=option['price'],
-            description=description,
-            return_url=return_url
-        )
-        
-        if not payment_result:
-            payment.status = 'failed'
-            db.commit()
-            await callback.message.edit_text(
-                "❌ Ошибка при создании платежа. Попробуйте позже.",
-                reply_markup=get_back_keyboard("consultations")
-            )
-            await callback.answer()
-            return
-        
-        # Обновляем платеж данными из ЮKassa
-        payment.payment_id = payment_result['id']
-        payment.confirmation_url = payment_result['confirmation_url']
-        db.commit()
-        
-        # Формируем сообщение об оплате
-        text = f"💳 **Оплата консультации**\n\n"
-        text += f"**Услуга:** {consultation['name']}\n"
-        text += f"**Вариант:** {option['name']}\n"
-        if option.get('duration'):
-            text += f"**Длительность:** {option['duration']}\n"
-        text += f"**Стоимость:** {option['price']:,.0f} ₽\n\n"
-        text += "Нажмите кнопку «Оплатить» для перехода на страницу оплаты.\n"
-        text += "После успешной оплаты с вами свяжется астролог для согласования времени встречи!"
-        
-        await callback.message.edit_text(
-            text,
-            reply_markup=get_payment_keyboard(payment_result['confirmation_url'], payment.id),
-            parse_mode="Markdown"
-        )
-        await callback.answer()
-    
-    except Exception as e:
-        logger.error(f"Error in process_consultation_option_selection: {e}", exc_info=True)
-        await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
-    
-    finally:
-        db.close()
+# Этот обработчик больше не используется - консультации теперь записываются через Telegram
+# Платежную ссылку генерирует админ через админ-панель
+# @router.callback_query(F.data.startswith("consultation_option_"))
+# async def process_consultation_option_selection(callback: CallbackQuery):
+#     """Обработка выбора варианта консультации и создание платежа"""
 
 
 @router.callback_query(F.data.startswith("check_payment_"))

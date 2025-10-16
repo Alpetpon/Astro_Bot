@@ -51,47 +51,11 @@ async def show_consultations_catalog(callback: CallbackQuery):
         db.close()
 
 
-@router.callback_query(F.data.startswith("consultation_book_"))
-async def show_consultation_booking(callback: CallbackQuery):
-    """Показать варианты консультации для записи"""
-    consultation_slug = callback.data.replace("consultation_book_", "")
-    
-    # Получаем консультацию из JSON
-    consultation = get_consultation_by_slug(consultation_slug)
-    
-    if not consultation:
-        await callback.answer("Консультация не найдена", show_alert=True)
-        return
-    
-    # Если есть варианты - показываем их
-    options = consultation.get('options', [])
-    active_options = [o for o in options if o.get('is_active', True)]
-    
-    if active_options:
-        text = f"📝 **Выберите вариант**\n\n"
-        text += f"{consultation.get('emoji', '🔮')} {consultation['name']}\n\n"
-        text += "Выберите подходящий вам вариант:"
-        
-        await callback.message.edit_text(
-            text,
-            reply_markup=get_consultation_options_keyboard(consultation_slug, active_options),
-            parse_mode="Markdown"
-        )
-    else:
-        # Если нет вариантов - сразу переходим к оплате
-        text = f"📝 **Запись на консультацию**\n\n"
-        text += f"{consultation.get('emoji', '🔮')} {consultation['name']}\n"
-        text += f"💰 Стоимость: {consultation.get('price', 0):,.0f} ₽\n"
-        text += f"⏱ Длительность: {consultation.get('duration', '')}\n\n"
-        text += "Для записи нажмите кнопку «Оплатить»"
-        
-        await callback.message.edit_text(
-            text,
-            reply_markup=get_back_keyboard(f"consultation_{consultation_slug}"),
-            parse_mode="Markdown"
-        )
-    
-    await callback.answer()
+# Этот обработчик больше не нужен - запись идет через Telegram
+# @router.callback_query(F.data.startswith("consultation_book_"))
+# async def show_consultation_booking(callback: CallbackQuery):
+#     """Показать варианты консультации для записи"""
+#     # Теперь кнопка "Записаться" ведет напрямую в Telegram
 
 
 @router.callback_query(F.data.startswith("consultation_"))
