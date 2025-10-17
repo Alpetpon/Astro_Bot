@@ -16,6 +16,7 @@ from data import (
     save_guide,
     delete_guide
 )
+from utils.bot_settings import is_admin
 
 router = Router()
 
@@ -59,11 +60,6 @@ class GuideManagement(StatesGroup):
     editing_description = State()
     editing_file_id = State()
     editing_related_course = State()
-
-
-def is_admin(user_id: int) -> bool:
-    """Проверка прав администратора"""
-    return user_id == config.ADMIN_ID
 
 
 # ==================== Список и создание гайдов ====================

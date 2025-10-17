@@ -31,16 +31,41 @@ async def show_courses_catalog(callback: CallbackQuery):
         courses = get_active_courses()
         
         if not courses:
-            await callback.message.edit_text(
-                "📚 К сожалению, сейчас нет доступных курсов.",
-                reply_markup=get_back_keyboard("main_menu")
-            )
+            text = "📚 К сожалению, сейчас нет доступных курсов."
+            markup = get_back_keyboard("main_menu")
         else:
+            text = "📚 **Каталог курсов**\n\nВыберите интересующий вас курс:"
+            markup = get_courses_keyboard(courses)
+        
+        try:
             await callback.message.edit_text(
-                "📚 **Каталог курсов**\n\nВыберите интересующий вас курс:",
-                reply_markup=get_courses_keyboard(courses),
+                text,
+                reply_markup=markup,
                 parse_mode="Markdown"
             )
+        except Exception:
+            # Если не можем отредактировать
+            if callback.message.video:
+                # Если видео - НЕ удаляем
+                await callback.bot.send_message(
+                    chat_id=callback.message.chat.id,
+                    text=text,
+                    reply_markup=markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                # Если фото - удаляем и отправляем новое
+                try:
+                    await callback.message.delete()
+                except Exception:
+                    pass
+                
+                await callback.bot.send_message(
+                    chat_id=callback.message.chat.id,
+                    text=text,
+                    reply_markup=markup,
+                    parse_mode="Markdown"
+                )
         
         await callback.answer()
     

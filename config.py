@@ -12,7 +12,25 @@ class Config:
     
     # Telegram
     BOT_TOKEN = os.getenv('BOT_TOKEN')
-    ADMIN_ID = int(os.getenv('ADMIN_ID', 0))
+    
+    # Поддержка нескольких администраторов
+    # Можно указать один ID или несколько через запятую
+    @staticmethod
+    def _parse_admin_ids():
+        """Парсинг ADMIN_ID из .env (поддержка нескольких ID через запятую)"""
+        admin_str = os.getenv('ADMIN_ID', '0')
+        try:
+            # Если несколько ID через запятую
+            if ',' in admin_str:
+                return [int(id.strip()) for id in admin_str.split(',') if id.strip()]
+            # Если один ID
+            return [int(admin_str)]
+        except ValueError:
+            logger.error(f"Invalid ADMIN_ID format: {admin_str}")
+            return [0]
+    
+    ADMIN_IDS = _parse_admin_ids()  # Список всех админов
+    ADMIN_ID = ADMIN_IDS[0] if ADMIN_IDS else 0  # Основной админ (для обратной совместимости)
     
     # ЮKassa
     YOOKASSA_SHOP_ID = os.getenv('YOOKASSA_SHOP_ID')
@@ -59,14 +77,19 @@ class Config:
     INACTIVITY_DAYS = 3  # Количество дней без активности для напоминания
     
     # Контакты для консультаций
-    CONSULTATION_TELEGRAM = os.getenv('CONSULTATION_TELEGRAM', 'Katrin_fucco')  # Username без @
+    CONSULTATION_TELEGRAM = 'Katrin_fucco'  # Username без @
     
-    # Соц. сети
-    INSTAGRAM_URL = os.getenv('INSTAGRAM_URL', 'https://instagram.com/your_profile')
-    YOUTUBE_URL = os.getenv('YOUTUBE_URL', 'https://youtube.com/@your_channel')
-    VK_URL = os.getenv('VK_URL', 'https://vk.com/your_profile')
-    TELEGRAM_CHANNEL_URL = os.getenv('TELEGRAM_CHANNEL_URL', 'https://t.me/your_channel')
-    DZEN_URL = os.getenv('DZEN_URL', 'https://dzen.ru/your_profile')
+    # Соц. сети (можно изменить прямо в коде)
+    INSTAGRAM_URL = 'https://instagram.com/your_profile'
+    YOUTUBE_URL = 'https://youtube.com/@your_channel'
+    VK_URL = 'https://vk.com/your_profile'
+    TELEGRAM_CHANNEL_URL = 'https://t.me/your_channel'
+    DZEN_URL = 'https://dzen.ru/your_profile'
+    
+    # Видео (File ID можно указать здесь или загрузить через админ-панель)
+    # Значения из админ-панели имеют приоритет над этими
+    WELCOME_VIDEO_FILE_ID = ''  # File ID приветственного видео
+    ABOUT_ME_VIDEO_FILE_ID = ''  # File ID видео-интервью "Обо мне"
     
     # Тексты
     WELCOME_TEXT = """
@@ -77,13 +100,12 @@ class Config:
 📚 Получить доступ к материалам
 💫 Отслеживать свой прогресс
 
-Нажмите «Перейти в меню» для продолжения
 """
     
     ABOUT_ME_TEXT = """
 👤 **Обо мне**
 
-Профессиональный астролог и психолог с опытом более X лет.
+Профессиональный астролог и психолог с опытом более 10 лет.
 
 Помогаю людям:
 • Познать себя через призму астрологии

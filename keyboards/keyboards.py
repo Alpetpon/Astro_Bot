@@ -5,6 +5,7 @@ from typing import List, Optional
 def get_start_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура приветствия"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="👤 Обо мне", callback_data="about_me")],
         [InlineKeyboardButton(text="✨ Перейти в меню", callback_data="main_menu")]
     ])
     return keyboard
@@ -13,10 +14,10 @@ def get_start_keyboard() -> InlineKeyboardMarkup:
 def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     """Главное меню"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="👤 Обо мне", callback_data="about_me")],
         [InlineKeyboardButton(text="💕 Гайды", callback_data="guides_list")],
         [InlineKeyboardButton(text="🔮 Консультации", callback_data="consultations")],
         [InlineKeyboardButton(text="📚 Курсы", callback_data="courses")],
+        [InlineKeyboardButton(text="⭐️ Отзывы", callback_data="reviews")],
         [InlineKeyboardButton(text="🏠 Мой кабинет", callback_data="my_cabinet")]
     ])
     return keyboard
@@ -35,12 +36,12 @@ def get_about_me_keyboard() -> InlineKeyboardMarkup:
     from config import config
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📷 Instagram", url=config.INSTAGRAM_URL)],
-        [InlineKeyboardButton(text="🎥 YouTube", url=config.YOUTUBE_URL)],
-        [InlineKeyboardButton(text="💙 ВКонтакте", url=config.VK_URL)],
-        [InlineKeyboardButton(text="✈️ Telegram канал", url=config.TELEGRAM_CHANNEL_URL)],
-        [InlineKeyboardButton(text="📰 Дзен", url=config.DZEN_URL)],
-        [InlineKeyboardButton(text="◀️ Назад в меню", callback_data="main_menu")]
+        [InlineKeyboardButton(text="Instagram", url=config.INSTAGRAM_URL)],
+        [InlineKeyboardButton(text="YouTube", url=config.YOUTUBE_URL)],
+        [InlineKeyboardButton(text="ВКонтакте", url=config.VK_URL)],
+        [InlineKeyboardButton(text="Telegram канал", url=config.TELEGRAM_CHANNEL_URL)],
+        [InlineKeyboardButton(text="Дзен", url=config.DZEN_URL)],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="start_back")]
     ])
     return keyboard
 
@@ -346,11 +347,22 @@ def get_admin_keyboard() -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
         [InlineKeyboardButton(text="💳 Создать ссылку на оплату", callback_data="admin_create_payment_link")],
+        [InlineKeyboardButton(text="🤖 Управление ботом", callback_data="admin_bot_management")],
+        [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")],
+        [InlineKeyboardButton(text="◀️ Главное меню", callback_data="main_menu")]
+    ])
+    return keyboard
+
+
+def get_bot_management_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура подменю управления ботом"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📚 Управление курсами", callback_data="admin_courses")],
         [InlineKeyboardButton(text="🔮 Управление консультациями", callback_data="admin_consultations")],
         [InlineKeyboardButton(text="💕 Управление гайдами", callback_data="admin_guides")],
-        [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")],
-        [InlineKeyboardButton(text="◀️ Главное меню", callback_data="main_menu")]
+        [InlineKeyboardButton(text="⭐️ Управление отзывами", callback_data="admin_reviews")],
+        [InlineKeyboardButton(text="🎥 Настройки видео", callback_data="admin_video_settings")],
+        [InlineKeyboardButton(text="◀️ Назад в админ-панель", callback_data="admin_panel")]
     ])
     return keyboard
 
@@ -360,5 +372,84 @@ def get_back_to_admin_keyboard() -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="◀️ Назад в админ-панель", callback_data="admin_panel")]
     ])
+    return keyboard
+
+
+def get_video_settings_keyboard(has_welcome_video: bool = False, has_about_me_video: bool = False) -> InlineKeyboardMarkup:
+    """Клавиатура настроек видео"""
+    buttons = []
+    
+    # Приветственное видео
+    if has_welcome_video:
+        buttons.append([
+            InlineKeyboardButton(text="🔄 Заменить приветственное видео", callback_data="video_welcome_upload")
+        ])
+        buttons.append([
+            InlineKeyboardButton(text="🗑 Удалить приветственное видео", callback_data="video_welcome_delete")
+        ])
+    else:
+        buttons.append([
+            InlineKeyboardButton(text="➕ Загрузить приветственное видео", callback_data="video_welcome_upload")
+        ])
+    
+    # Видео "Обо мне"
+    if has_about_me_video:
+        buttons.append([
+            InlineKeyboardButton(text="🔄 Заменить видео 'Обо мне'", callback_data="video_about_me_upload")
+        ])
+        buttons.append([
+            InlineKeyboardButton(text="🗑 Удалить видео 'Обо мне'", callback_data="video_about_me_delete")
+        ])
+    else:
+        buttons.append([
+            InlineKeyboardButton(text="➕ Загрузить видео 'Обо мне'", callback_data="video_about_me_upload")
+        ])
+    
+    # Кнопка назад
+    buttons.append([
+        InlineKeyboardButton(text="◀️ Назад в админ-панель", callback_data="admin_panel")
+    ])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    return keyboard
+
+
+def get_reviews_navigation_keyboard(page: int = 0, total_pages: int = 1) -> InlineKeyboardMarkup:
+    """Клавиатура навигации по отзывам с фото"""
+    buttons = []
+    
+    # Если страниц больше одной, добавляем навигацию
+    if total_pages > 1:
+        nav_buttons = []
+        
+        # Кнопка "Назад"
+        if page > 0:
+            nav_buttons.append(InlineKeyboardButton(
+                text="◀️ Назад",
+                callback_data=f"reviews_page_{page - 1}"
+            ))
+        
+        # Индикатор страницы
+        nav_buttons.append(InlineKeyboardButton(
+            text=f"{page + 1}/{total_pages}",
+            callback_data="reviews_page_current"
+        ))
+        
+        # Кнопка "Далее"
+        if page < total_pages - 1:
+            nav_buttons.append(InlineKeyboardButton(
+                text="Далее ▶️",
+                callback_data=f"reviews_page_{page + 1}"
+            ))
+        
+        buttons.append(nav_buttons)
+    
+    # Кнопка перехода к курсам
+    buttons.append([InlineKeyboardButton(text="📚 Курсы", callback_data="courses")])
+    
+    # Кнопка "Назад в меню" всегда присутствует
+    buttons.append([InlineKeyboardButton(text="🏠 Назад в меню", callback_data="main_menu")])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard
 

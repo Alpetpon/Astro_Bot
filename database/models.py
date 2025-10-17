@@ -45,6 +45,7 @@ class Payment(Base):
     confirmation_url = Column(String(500), nullable=True)
     product_type = Column(String(50), default='course')  # course, consultation, tarot, guide
     product_id = Column(String(100), nullable=True)  # ID продукта (универсальный)
+    is_payment_link = Column(Boolean, default=False)  # Платеж создан через админ-ссылку
     created_at = Column(DateTime, default=datetime.utcnow)
     paid_at = Column(DateTime, nullable=True)
     
@@ -53,3 +54,16 @@ class Payment(Base):
     
     def __repr__(self):
         return f"<Payment {self.payment_id} - {self.status}>"
+
+
+class BotSettings(Base):
+    """Модель настроек бота"""
+    __tablename__ = 'bot_settings'
+    
+    id = Column(Integer, primary_key=True)
+    setting_key = Column(String(100), unique=True, nullable=False, index=True)
+    setting_value = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<BotSettings {self.setting_key}>"

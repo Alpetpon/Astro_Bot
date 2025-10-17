@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from config import config
 from database import get_db, User
 from keyboards import get_start_keyboard
+from utils.bot_settings import get_setting, WELCOME_VIDEO_KEY
 
 router = Router()
 
@@ -35,11 +36,70 @@ async def cmd_start(message: Message):
             user.last_activity = datetime.utcnow()
             db.commit()
         
-        await message.answer(
+        # Получаем file_id видео (сначала из БД, потом из config)
+        welcome_video_id = get_setting(WELCOME_VIDEO_KEY) or config.WELCOME_VIDEO_FILE_ID
+        
+        # Отправляем приветственное видео, если оно настроено
+        if welcome_video_id:
+            try:
+                await message.answer_video(
+                    video=welcome_video_id,
+                    caption=config.WELCOME_TEXT,
+                    reply_markup=get_start_keyboard()
+                )
+            except Exception as e:
+                # Если видео не отправилось, отправляем обычный текст
+                await message.answer(
+                    config.WELCOME_TEXT,
+                    reply_markup=get_start_keyboard()
+                )
+        else:
+            # Если видео не настроено, отправляем обычный текст
+            await message.answer(
+                config.WELCOME_TEXT,
+                reply_markup=get_start_keyboard()
+            )
+    
+    finally:
+        db.close()
+
+
+@router.callback_query(F.data == "start_back")
+async def back_to_start(callback: CallbackQuery):
+    """Возврат к приветственному сообщению"""
+    # Получаем file_id видео (сначала из БД, потом из config)
+    welcome_video_id = get_setting(WELCOME_VIDEO_KEY) or config.WELCOME_VIDEO_FILE_ID
+    
+    try:
+        # Удаляем предыдущее сообщение
+        await callback.message.delete()
+        
+        # Отправляем приветственное видео, если оно настроено
+        if welcome_video_id:
+            try:
+                await callback.message.answer_video(
+                    video=welcome_video_id,
+                    caption=config.WELCOME_TEXT,
+                    reply_markup=get_start_keyboard()
+                )
+            except Exception as e:
+                # Если видео не отправилось, отправляем обычный текст
+                await callback.message.answer(
+                    config.WELCOME_TEXT,
+                    reply_markup=get_start_keyboard()
+                )
+        else:
+            # Если видео не настроено, отправляем обычный текст
+            await callback.message.answer(
+                config.WELCOME_TEXT,
+                reply_markup=get_start_keyboard()
+            )
+    except Exception:
+        # Если не можем удалить сообщение, просто редактируем
+        await callback.message.edit_text(
             config.WELCOME_TEXT,
             reply_markup=get_start_keyboard()
         )
     
-    finally:
-        db.close()
+    await callback.answer()
 

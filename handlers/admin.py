@@ -13,8 +13,9 @@ from openpyxl.styles import Font, PatternFill, Alignment
 
 from config import config
 from database import get_db, User, Payment
-from keyboards import get_admin_keyboard, get_back_to_admin_keyboard
+from keyboards import get_admin_keyboard, get_bot_management_keyboard, get_back_to_admin_keyboard
 from data import get_all_courses, get_all_consultations
+from utils.bot_settings import is_admin
 
 # Заглушки для старых моделей БД (код не используется, проект работает на JSON)
 Course = None  # type: ignore
@@ -67,9 +68,12 @@ class PaymentLinkCreation(StatesGroup):
     waiting_for_amount = State()
 
 
-def is_admin(user_id: int) -> bool:
-    """Проверка, является ли пользователь администратором"""
-    return user_id == config.ADMIN_ID
+class BroadcastStates(StatesGroup):
+    """Состояния для рассылки"""
+    waiting_for_text = State()
+    waiting_for_photo = State()
+    waiting_for_video = State()
+    waiting_for_caption = State()
 
 
 @router.message(Command("admin"))
@@ -97,6 +101,21 @@ async def show_admin_panel(callback: CallbackQuery):
         "🔐 <b>Админ-панель</b>\n\n"
         "Выберите действие:",
         reply_markup=get_admin_keyboard()
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_bot_management")
+async def show_bot_management(callback: CallbackQuery):
+    """Показать подменю управления ботом"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    await callback.message.edit_text(
+        "🤖 <b>Управление ботом</b>\n\n"
+        "Выберите раздел для управления:",
+        reply_markup=get_bot_management_keyboard()
     )
     await callback.answer()
 
@@ -129,9 +148,12 @@ async def show_stats(callback: CallbackQuery):
             Payment.created_at >= week_ago
         ).scalar() or 0
         
-        # Курсы и консультации (из JSON)
+        # Курсы, консультации и гайды (из JSON)
         total_courses = len(get_all_courses())
         total_consultations = len(get_all_consultations())
+        
+        from data import get_all_guides
+        total_guides = len(get_all_guides())
         
         stats_text = f"""📊 <b>Статистика</b>
 
@@ -149,6 +171,7 @@ async def show_stats(callback: CallbackQuery):
 📚 <b>Контент:</b>
 • Курсов: {total_courses}
 • Консультаций: {total_consultations}
+• Гайдов: {total_guides}
 """
         
         # Кнопки с возможностью скачать Excel
@@ -170,20 +193,21 @@ async def show_stats(callback: CallbackQuery):
 
 
 @router.callback_query(F.data == "admin_broadcast")
-async def broadcast_info(callback: CallbackQuery):
-    """Информация о рассылке"""
+async def start_broadcast(callback: CallbackQuery, state: FSMContext):
+    """Начать рассылку"""
     if not is_admin(callback.from_user.id):
         await callback.answer("❌ Доступ запрещен", show_alert=True)
         return
     
     await callback.message.edit_text(
         "📢 <b>Рассылка</b>\n\n"
-        "Для отправки рассылки всем пользователям используйте команду:\n"
-        "<code>/broadcast [текст сообщения]</code>\n\n"
-        "Пример:\n"
-        "<code>/broadcast Новый курс уже доступен!</code>",
-        reply_markup=get_back_to_admin_keyboard()
+        "Отправьте сообщение для рассылки:\n"
+        "• Текст\n"
+        "• Фото (с подписью или без)\n"
+        "• Видео (с подписью или без)\n\n"
+        "Отправьте /cancel для отмены."
     )
+    await state.set_state(BroadcastStates.waiting_for_text)
     await callback.answer()
 
 
@@ -235,6 +259,149 @@ async def broadcast_message(message: Message):
         db.close()
 
 
+# ===== Универсальный обработчик рассылки =====
+
+@router.message(BroadcastStates.waiting_for_text)
+async def process_broadcast_content(message: Message, state: FSMContext):
+    """Универсальный обработчик для любого контента рассылки"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    # Проверка на отмену
+    if message.text == "/cancel":
+        await state.clear()
+        await message.answer("❌ Рассылка отменена", reply_markup=get_admin_keyboard())
+        return
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Отправить рассылку", callback_data="confirm_broadcast")],
+        [InlineKeyboardButton(text="❌ Отменить", callback_data="admin_broadcast")]
+    ])
+    
+    # Обработка фото
+    if message.photo:
+        photo_id = message.photo[-1].file_id
+        caption = message.caption or ""
+        
+        await state.update_data(photo_id=photo_id, caption=caption, media_type="photo")
+        
+        preview_text = f"🖼 <b>Превью рассылки</b>\n\n"
+        if caption:
+            preview_text += f"{caption}\n\n"
+        preview_text += "Подтвердите отправку:"
+        
+        await message.answer_photo(
+            photo=photo_id,
+            caption=preview_text,
+            reply_markup=keyboard
+        )
+    
+    # Обработка видео
+    elif message.video:
+        video_id = message.video.file_id
+        caption = message.caption or ""
+        
+        await state.update_data(video_id=video_id, caption=caption, media_type="video")
+        
+        preview_text = f"🎥 <b>Превью рассылки</b>\n\n"
+        if caption:
+            preview_text += f"{caption}\n\n"
+        preview_text += "Подтвердите отправку:"
+        
+        await message.answer_video(
+            video=video_id,
+            caption=preview_text,
+            reply_markup=keyboard
+        )
+    
+    # Обработка текста
+    elif message.text:
+        text = message.text
+        
+        await state.update_data(text=text, media_type="text")
+        
+        await message.answer(
+            f"📝 <b>Превью рассылки:</b>\n\n{text}\n\n"
+            "Подтвердите отправку:",
+            reply_markup=keyboard
+        )
+    
+    else:
+        await message.answer("❌ Поддерживаются только текст, фото или видео")
+
+
+@router.callback_query(F.data == "confirm_broadcast")
+async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext):
+    """Подтверждение и отправка рассылки"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    data = await state.get_data()
+    media_type = data.get("media_type")
+    
+    db: Session = get_db()
+    
+    try:
+        users = db.query(User).all()
+        
+        success_count = 0
+        fail_count = 0
+        
+        # Удаляем превью и отправляем новое сообщение о начале рассылки
+        try:
+            await callback.message.delete()
+        except:
+            pass
+        
+        status_msg = await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text=f"📤 Начинаю рассылку для {len(users)} пользователей..."
+        )
+        
+        for user in users:
+            try:
+                if media_type == "text":
+                    await callback.bot.send_message(
+                        chat_id=user.telegram_id,
+                        text=data["text"]
+                    )
+                elif media_type == "photo":
+                    await callback.bot.send_photo(
+                        chat_id=user.telegram_id,
+                        photo=data["photo_id"],
+                        caption=data.get("caption")
+                    )
+                elif media_type == "video":
+                    await callback.bot.send_video(
+                        chat_id=user.telegram_id,
+                        video=data["video_id"],
+                        caption=data.get("caption")
+                    )
+                
+                success_count += 1
+            except Exception as e:
+                fail_count += 1
+        
+        await status_msg.edit_text(
+            f"✅ Рассылка завершена!\n\n"
+            f"Успешно: {success_count}\n"
+            f"Ошибок: {fail_count}"
+        )
+        
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text="Выберите действие:",
+            reply_markup=get_admin_keyboard()
+        )
+        
+        await state.clear()
+        await callback.answer()
+    
+    finally:
+        db.close()
+
+
 @router.callback_query(F.data == "admin_courses")
 async def show_courses_management(callback: CallbackQuery):
     """Показать управление курсами"""
@@ -242,45 +409,40 @@ async def show_courses_management(callback: CallbackQuery):
         await callback.answer("❌ Доступ запрещен", show_alert=True)
         return
     
-    db: Session = get_db()
+    # Получаем курсы из JSON
+    courses = get_all_courses()
     
-    try:
-        courses = db.query(Course).order_by(Course.order).all()
+    if not courses:
+        await callback.message.edit_text(
+            "📚 <b>Курсы отсутствуют</b>\n\n"
+            "Курсы хранятся в файле data/courses.json",
+            reply_markup=get_back_to_admin_keyboard()
+        )
+    else:
+        buttons = []
+        for course in courses:
+            # Подсчитываем уроки из course_materials.json
+            from data import get_course_materials
+            materials = get_course_materials(course['slug'])
+            lessons_count = len(materials) if materials else 0
+            
+            buttons.append([InlineKeyboardButton(
+                text=f"{course.get('emoji', '📚')} {course['name']} ({lessons_count} уроков)",
+                callback_data=f"manage_course_{course['slug']}"
+            )])
         
-        if not courses:
-            await callback.message.edit_text(
-                "📚 <b>Курсы отсутствуют</b>\n\n"
-                "Создайте курсы через utils/admin.py",
-                reply_markup=get_back_to_admin_keyboard()
-            )
-        else:
-            buttons = []
-            for course in courses:
-                lessons_count = len(course.lessons)
-                buttons.append([InlineKeyboardButton(
-                    text=f"📖 {course.name} ({lessons_count} уроков)",
-                    callback_data=f"manage_course_{course.id}"
-                )])
-            
-            buttons.append([InlineKeyboardButton(
-                text="➕ Создать новый курс",
-                callback_data="create_course"
-            )])
-            buttons.append([InlineKeyboardButton(
-                text="◀️ Назад в админ-панель",
-                callback_data="admin_panel"
-            )])
-            
-            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-            
-            await callback.message.edit_text(
-                "📚 <b>Управление курсами</b>\n\n"
-                "Выберите курс для редактирования или создайте новый:",
-                reply_markup=keyboard
-            )
-    
-    finally:
-        db.close()
+        buttons.append([InlineKeyboardButton(
+            text="◀️ Назад в админ-панель",
+            callback_data="admin_panel"
+        )])
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        
+        await callback.message.edit_text(
+            "📚 <b>Управление курсами</b>\n\n"
+            "Просмотр курсов. Для редактирования используйте файлы data/courses.json и data/course_materials.json",
+            reply_markup=keyboard
+        )
     
     await callback.answer()
 
@@ -292,281 +454,434 @@ async def manage_course(callback: CallbackQuery):
         await callback.answer("❌ Доступ запрещен", show_alert=True)
         return
     
-    course_id = int(callback.data.split("_")[2])
-    db: Session = get_db()
+    # Извлекаем slug курса
+    course_slug = "_".join(callback.data.split("_")[2:])
     
-    try:
-        course = db.query(Course).filter(Course.id == course_id).first()
-        
-        if not course:
-            await callback.answer("Курс не найден", show_alert=True)
-            return
-        
-        lessons = db.query(Lesson).filter(Lesson.course_id == course_id).order_by(
-            Lesson.module_number, Lesson.lesson_number
-        ).all()
-        
-        text = f"📖 <b>{course.name}</b>\n\n"
-        
-        if lessons:
-            text += "📝 <b>Уроки:</b>\n\n"
-            for lesson in lessons:
-                text += f"• М{lesson.module_number}.У{lesson.lesson_number}: {lesson.title}\n"
-        else:
-            text += "Уроков пока нет\n"
-        
-        buttons = [
-            [InlineKeyboardButton(
-                text="➕ Добавить урок",
-                callback_data=f"add_lesson_{course_id}"
-            )]
-        ]
-        
-        if lessons:
-            buttons.append([InlineKeyboardButton(
-                text="✏️ Редактировать урок",
-                callback_data=f"edit_lessons_{course_id}"
-            )])
-        
+    from data import get_course_by_slug, get_course_materials
+    
+    course = get_course_by_slug(course_slug)
+    
+    if not course:
+        await callback.answer("Курс не найден", show_alert=True)
+        return
+    
+    # Получаем материалы курса
+    materials = get_course_materials(course_slug)
+    modules = materials.get('modules', []) if materials else []
+    
+    text = f"📖 <b>{course['name']}</b>\n\n"
+    text += f"📍 Slug: <code>{course['slug']}</code>\n"
+    
+    if course.get('price'):
+        text += f"💰 Цена: {course['price']:,.0f} ₽\n"
+    
+    if course.get('duration'):
+        text += f"⏱ Длительность: {course['duration']}\n"
+    
+    text += f"✅ Активен: {'Да' if course.get('is_active', True) else 'Нет'}\n"
+    
+    if modules:
+        text += f"\n📂 <b>Модулей:</b> {len(modules)}\n\n"
+        for module in modules:
+            lessons_count = len(module.get('lessons', []))
+            text += f"• {module.get('title', 'Без названия')} ({lessons_count} уроков)\n"
+    else:
+        text += "\nМодулей пока нет\n"
+    
+    buttons = []
+    
+    # Кнопки для просмотра модулей
+    if modules:
         buttons.append([InlineKeyboardButton(
-            text="◀️ Назад к курсам",
-            callback_data="admin_courses"
+            text="📂 Просмотр модулей",
+            callback_data=f"view_modules_{course_slug}"
         )])
-        
-        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-        
-        await callback.message.edit_text(text, reply_markup=keyboard)
     
-    finally:
-        db.close()
+    # Кнопка добавления модуля
+    buttons.append([InlineKeyboardButton(
+        text="➕ Добавить модуль",
+        callback_data=f"add_module_{course_slug}"
+    )])
     
+    buttons.append([InlineKeyboardButton(
+        text="◀️ Назад к курсам",
+        callback_data="admin_courses"
+    )])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+    await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("add_lesson_"))
-async def add_lesson_start(callback: CallbackQuery, state: FSMContext):
-    """Начало добавления урока"""
+@router.callback_query(F.data.startswith("view_modules_"))
+async def view_modules(callback: CallbackQuery):
+    """Просмотр списка модулей курса"""
     if not is_admin(callback.from_user.id):
         await callback.answer("❌ Доступ запрещен", show_alert=True)
         return
     
-    course_id = int(callback.data.split("_")[2])
+    course_slug = "_".join(callback.data.split("_")[2:])
     
-    # Сохраняем course_id в состоянии
-    await state.update_data(course_id=course_id)
+    from data import get_course_by_slug, get_course_modules
     
-    # Получаем номер следующего урока
-    db: Session = get_db()
-    try:
-        course = db.query(Course).filter(Course.id == course_id).first()
-        lessons = db.query(Lesson).filter(Lesson.course_id == course_id).all()
-        
-        if lessons:
-            max_module = max(lesson.module_number for lesson in lessons)
-            max_lesson_in_module = max(
-                lesson.lesson_number for lesson in lessons 
-                if lesson.module_number == max_module
-            )
-            suggested_module = max_module
-            suggested_lesson = max_lesson_in_module + 1
-        else:
-            suggested_module = 1
-            suggested_lesson = 1
-        
-        await state.update_data(
-            suggested_module=suggested_module,
-            suggested_lesson=suggested_lesson
-        )
-        
-        cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_course_{course_id}")]
-        ])
-        
-        await callback.message.edit_text(
-            f"➕ <b>Добавление урока в курс \"{course.name}\"</b>\n\n"
-            f"Предлагаю: Модуль {suggested_module}, Урок {suggested_lesson}\n\n"
-            f"Отправьте название урока в формате:\n"
-            f"<code>М.У Название</code>\n\n"
-            f"Например: <code>{suggested_module}.{suggested_lesson} Введение в астрологию</code>\n"
-            f"Или просто: <code>Введение в астрологию</code> (будет М{suggested_module}.У{suggested_lesson})",
-            reply_markup=cancel_keyboard
-        )
-        
-        await state.set_state(CourseManagement.waiting_for_lesson_title)
+    course = get_course_by_slug(course_slug)
+    if not course:
+        await callback.answer("Курс не найден", show_alert=True)
+        return
     
-    finally:
-        db.close()
+    modules = get_course_modules(course_slug)
     
+    text = f"📂 <b>Модули курса: {course['name']}</b>\n\n"
+    
+    buttons = []
+    for module in modules:
+        lessons_count = len(module.get('lessons', []))
+        buttons.append([InlineKeyboardButton(
+            text=f"📂 {module.get('title', 'Без названия')} ({lessons_count} уроков)",
+            callback_data=f"view_module_{course_slug}_{module['id']}"
+        )])
+    
+    buttons.append([InlineKeyboardButton(
+        text="◀️ Назад к курсу",
+        callback_data=f"manage_course_{course_slug}"
+    )])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
 
 
+@router.callback_query(F.data.startswith("view_module_"))
+async def view_module(callback: CallbackQuery):
+    """Просмотр конкретного модуля"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    parts = callback.data.split("_")
+    module_id = parts[-1]
+    course_slug = "_".join(parts[2:-1])
+    
+    from data import get_course_by_slug, get_module_by_id
+    
+    course = get_course_by_slug(course_slug)
+    module = get_module_by_id(course_slug, module_id)
+    
+    if not course or not module:
+        await callback.answer("Модуль не найден", show_alert=True)
+        return
+    
+    text = f"📂 <b>{module['title']}</b>\n\n"
+    if module.get('description'):
+        text += f"{module['description']}\n\n"
+    
+    lessons = module.get('lessons', [])
+    if lessons:
+        text += f"📝 <b>Уроков: {len(lessons)}</b>\n\n"
+        for i, lesson in enumerate(lessons, 1):
+            text += f"{i}. {lesson.get('title', 'Без названия')}\n"
+    else:
+        text += "Уроков пока нет\n"
+    
+    buttons = []
+    
+    # Кнопки для редактирования уроков
+    if lessons:
+        for lesson in lessons:
+            buttons.append([InlineKeyboardButton(
+                text=f"✏️ {lesson.get('title', 'Без названия')[:30]}...",
+                callback_data=f"edit_lesson_{course_slug}_{module_id}_{lesson['id']}"
+            )])
+    
+    # Кнопка добавления урока
+    buttons.append([InlineKeyboardButton(
+        text="➕ Добавить урок",
+        callback_data=f"add_lesson_to_module_{course_slug}_{module_id}"
+    )])
+    
+    buttons.append([InlineKeyboardButton(
+        text="◀️ К модулям",
+        callback_data=f"view_modules_{course_slug}"
+    )])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("add_module_"))
+async def add_module_start(callback: CallbackQuery, state: FSMContext):
+    """Начало добавления модуля"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    course_slug = "_".join(callback.data.split("_")[2:])
+    
+    await state.update_data(course_slug=course_slug, adding_module=True)
+    await state.set_state(CourseManagement.waiting_for_lesson_title)
+    
+    await callback.message.edit_text(
+        "➕ <b>Добавление модуля</b>\n\n"
+        "Введите название модуля:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_course_{course_slug}")]
+        ])
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("add_lesson_to_module_"))
+async def add_lesson_to_module_start(callback: CallbackQuery, state: FSMContext):
+    """Начало добавления урока в модуль"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    parts = callback.data.split("_")
+    module_id = parts[-1]
+    course_slug = "_".join(parts[4:-1])
+    
+    await state.update_data(
+        course_slug=course_slug,
+        module_id=module_id,
+        adding_lesson=True
+    )
+    await state.set_state(CourseManagement.waiting_for_lesson_title)
+    
+    await callback.message.edit_text(
+        "➕ <b>Добавление урока</b>\n\n"
+        "Введите название урока:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"view_module_{course_slug}_{module_id}")]
+        ])
+    )
+    await callback.answer()
+
+
+# Старый обработчик, оставим для совместимости, но перенаправим
+@router.callback_query(F.data.startswith("add_lesson_"))
+async def add_lesson_start(callback: CallbackQuery, state: FSMContext):
+    """Начало добавления урока - DEPRECATED"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    # Перенаправляем на управление курсами
+    await callback.answer("⚠️ Используйте новый интерфейс", show_alert=True)
+    await callback.message.edit_text(
+        "ℹ️ Управление курсами перенесено на новый интерфейс\n\n"
+        "Используйте кнопку 'Управление курсами' в админ-панели",
+        reply_markup=get_back_to_admin_keyboard()
+    )
+
+
 @router.message(CourseManagement.waiting_for_lesson_title)
-async def add_lesson_title(message: Message, state: FSMContext):
-    """Получение названия урока"""
+async def process_title_input(message: Message, state: FSMContext):
+    """Обработка ввода названия (модуля или урока)"""
     if not is_admin(message.from_user.id):
         return
     
     data = await state.get_data()
-    course_id = data['course_id']
-    suggested_module = data['suggested_module']
-    suggested_lesson = data['suggested_lesson']
+    title = message.text.strip()
     
-    title_text = message.text.strip()
+    # Проверяем что добавляем
+    if data.get('adding_module'):
+        # Добавляем модуль
+        await state.update_data(module_title=title)
+        course_slug = data['course_slug']
+        
+        await message.answer(
+            f"✅ Название модуля: <b>{title}</b>\n\n"
+            f"Теперь отправьте описание модуля (или отправьте 'пропустить'):",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="⏭ Пропустить", callback_data=f"skip_module_desc_{course_slug}")]
+            ])
+        )
+        await state.set_state(CourseManagement.waiting_for_lesson_description)
+        
+    elif data.get('adding_lesson'):
+        # Добавляем урок
+        await state.update_data(lesson_title=title)
+        course_slug = data['course_slug']
+        module_id = data['module_id']
+        
+        await message.answer(
+            f"✅ Название урока: <b>{title}</b>\n\n"
+            f"Теперь отправьте описание урока:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отмена", callback_data=f"view_module_{course_slug}_{module_id}")]
+            ])
+        )
+        await state.set_state(CourseManagement.waiting_for_lesson_description)
+
+
+@router.callback_query(F.data.startswith("skip_module_desc_"))
+async def skip_module_description(callback: CallbackQuery, state: FSMContext):
+    """Пропустить описание модуля"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
     
-    # Парсим модуль и урок, если указаны
-    if '.' in title_text.split()[0]:
-        try:
-            module_lesson, *title_parts = title_text.split(maxsplit=1)
-            module_num, lesson_num = map(int, module_lesson.split('.'))
-            title = title_parts[0] if title_parts else "Без названия"
-        except:
-            module_num = suggested_module
-            lesson_num = suggested_lesson
-            title = title_text
-    else:
-        module_num = suggested_module
-        lesson_num = suggested_lesson
-        title = title_text
-    
-    await state.update_data(
-        lesson_title=title,
-        module_number=module_num,
-        lesson_number=lesson_num
-    )
-    
-    cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_course_{course_id}")]
-    ])
-    
-    await message.answer(
-        f"✅ Название: <b>{title}</b>\n"
-        f"📍 Позиция: Модуль {module_num}, Урок {lesson_num}\n\n"
-        f"Теперь отправьте описание урока:",
-        reply_markup=cancel_keyboard
-    )
-    
-    await state.set_state(CourseManagement.waiting_for_lesson_description)
+    await state.update_data(module_description="")
+    await save_new_module(callback.message, state)
+    await callback.answer()
 
 
 @router.message(CourseManagement.waiting_for_lesson_description)
-async def add_lesson_description(message: Message, state: FSMContext):
-    """Получение описания урока"""
+async def process_description_input(message: Message, state: FSMContext):
+    """Обработка ввода описания (модуля или урока)"""
     if not is_admin(message.from_user.id):
         return
     
     data = await state.get_data()
-    course_id = data['course_id']
+    description = message.text.strip()
     
-    await state.update_data(lesson_description=message.text.strip())
-    
-    cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_course_{course_id}")]
-    ])
-    
-    await message.answer(
-        "✅ Описание сохранено\n\n"
-        "Теперь отправьте контент урока (текст урока):",
-        reply_markup=cancel_keyboard
-    )
-    
-    await state.set_state(CourseManagement.waiting_for_lesson_content)
+    # Проверяем что добавляем
+    if data.get('adding_module'):
+        # Сохраняем описание и создаем модуль
+        await state.update_data(module_description=description)
+        await save_new_module(message, state)
+        
+    elif data.get('adding_lesson'):
+        # Сохраняем описание и просим видео
+        await state.update_data(lesson_description=description)
+        course_slug = data['course_slug']
+        module_id = data['module_id']
+        
+        await message.answer(
+            "✅ Описание сохранено\n\n"
+            "Отправьте ссылку на видео (YouTube URL) или нажмите 'Пропустить':",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="⏭ Пропустить", callback_data=f"skip_lesson_video_{course_slug}_{module_id}")],
+                [InlineKeyboardButton(text="❌ Отмена", callback_data=f"view_module_{course_slug}_{module_id}")]
+            ])
+        )
+        await state.set_state(CourseManagement.waiting_for_lesson_video)
 
 
-@router.message(CourseManagement.waiting_for_lesson_content)
-async def add_lesson_content(message: Message, state: FSMContext):
-    """Получение контента урока"""
-    if not is_admin(message.from_user.id):
-        return
-    
+async def save_new_module(message: Message, state: FSMContext):
+    """Сохранение нового модуля"""
     data = await state.get_data()
-    course_id = data['course_id']
+    course_slug = data['course_slug']
     
-    await state.update_data(lesson_content=message.text.strip())
+    from data import add_module_to_course, get_course_modules
+    import uuid
     
-    skip_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⏭ Пропустить", callback_data=f"skip_video_{course_id}")],
-        [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_course_{course_id}")]
-    ])
+    # Генерируем ID
+    modules = get_course_modules(course_slug)
+    module_order = len(modules) + 1
     
-    await message.answer(
-        "✅ Контент сохранен\n\n"
-        "Отправьте ссылку на видео (YouTube, Vimeo и т.д.) или нажмите 'Пропустить':",
-        reply_markup=skip_keyboard
-    )
+    new_module = {
+        'id': f"module-{module_order}",
+        'title': data.get('module_title', 'Новый модуль'),
+        'description': data.get('module_description', ''),
+        'order': module_order,
+        'lessons': []
+    }
     
-    await state.set_state(CourseManagement.waiting_for_lesson_video)
+    try:
+        add_module_to_course(course_slug, new_module)
+        
+        await message.answer(
+            f"✅ <b>Модуль успешно добавлен!</b>\n\n"
+            f"📂 {new_module['title']}\n\n"
+            f"Теперь вы можете добавить уроки в этот модуль.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="➕ Добавить урок", callback_data=f"add_lesson_to_module_{course_slug}_{new_module['id']}")],
+                [InlineKeyboardButton(text="◀️ К курсу", callback_data=f"manage_course_{course_slug}")]
+            ])
+        )
+    except Exception as e:
+        await message.answer(f"❌ Ошибка при добавлении модуля: {str(e)}")
+    
+    await state.clear()
 
 
-@router.callback_query(F.data.startswith("skip_video_"))
-async def skip_video(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(F.data.startswith("skip_lesson_video_"))
+async def skip_lesson_video(callback: CallbackQuery, state: FSMContext):
     """Пропустить видео и сохранить урок"""
     if not is_admin(callback.from_user.id):
         await callback.answer("❌ Доступ запрещен", show_alert=True)
         return
     
-    await save_new_lesson(callback.message, state, video_url=None)
+    await state.update_data(video_url="")
+    await save_new_lesson_to_module(callback.message, state)
     await callback.answer()
 
 
 @router.message(CourseManagement.waiting_for_lesson_video)
-async def add_lesson_video(message: Message, state: FSMContext):
+async def process_lesson_video(message: Message, state: FSMContext):
     """Получение видео для урока"""
     if not is_admin(message.from_user.id):
         return
     
     video_url = message.text.strip()
-    await save_new_lesson(message, state, video_url)
+    await state.update_data(video_url=video_url)
+    await save_new_lesson_to_module(message, state)
 
 
-async def save_new_lesson(message: Message, state: FSMContext, video_url: str = None):
-    """Сохранение нового урока в БД"""
+async def save_new_lesson_to_module(message: Message, state: FSMContext):
+    """Сохранение нового урока в модуль"""
     data = await state.get_data()
+    course_slug = data['course_slug']
+    module_id = data['module_id']
     
-    db: Session = get_db()
-    try:
-        lesson = Lesson(
-            course_id=data['course_id'],
-            module_number=data['module_number'],
-            lesson_number=data['lesson_number'],
-            title=data['lesson_title'],
-            description=data.get('lesson_description', ''),
-            content=data.get('lesson_content', ''),
-            video_url=video_url,
-            order=(data['module_number'] * 100) + data['lesson_number']
-        )
-        
-        db.add(lesson)
-        db.commit()
-        
-        course = db.query(Course).filter(Course.id == data['course_id']).first()
-        
-        back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text="◀️ Назад к курсу",
-                callback_data=f"manage_course_{data['course_id']}"
-            )]
-        ])
-        
-        await message.answer(
-            f"✅ <b>Урок успешно добавлен!</b>\n\n"
-            f"📖 Курс: {course.name}\n"
-            f"📍 Модуль {data['module_number']}, Урок {data['lesson_number']}\n"
-            f"📝 Название: {data['lesson_title']}",
-            reply_markup=back_keyboard
-        )
+    from data import add_lesson_to_module, get_module_by_id
     
-    finally:
-        db.close()
+    # Получаем модуль чтобы определить порядок урока
+    module = get_module_by_id(course_slug, module_id)
+    if not module:
+        await message.answer("❌ Модуль не найден")
         await state.clear()
+        return
+    
+    lessons_count = len(module.get('lessons', []))
+    lesson_order = lessons_count + 1
+    
+    new_lesson = {
+        'id': f"lesson-{module_id}-{lesson_order}",
+        'title': data.get('lesson_title', 'Новый урок'),
+        'description': data.get('lesson_description', ''),
+        'duration': '',
+        'type': 'video',
+        'file_id': '',
+        'video_url': data.get('video_url', ''),
+        'order': lesson_order,
+        'materials': []
+    }
+    
+    try:
+        success = add_lesson_to_module(course_slug, module_id, new_lesson)
+        
+        if success:
+            await message.answer(
+                f"✅ <b>Урок успешно добавлен!</b>\n\n"
+                f"📝 {new_lesson['title']}\n"
+                f"📂 Модуль: {module['title']}",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="➕ Добавить еще урок", callback_data=f"add_lesson_to_module_{course_slug}_{module_id}")],
+                    [InlineKeyboardButton(text="◀️ К модулю", callback_data=f"view_module_{course_slug}_{module_id}")]
+                ])
+            )
+        else:
+            await message.answer("❌ Ошибка при добавлении урока")
+    except Exception as e:
+        await message.answer(f"❌ Ошибка: {str(e)}")
+    
+    await state.clear()
 
+
+# DEPRECATED: Старые обработчики редактирования уроков (с БД) закомментированы
 
 @router.callback_query(F.data.startswith("edit_lessons_"))
 async def edit_lessons_list(callback: CallbackQuery):
-    """Список уроков для редактирования"""
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Доступ запрещен", show_alert=True)
-        return
+    """Список уроков для редактирования - DEPRECATED"""
+    await callback.answer("⚠️ Используйте новый интерфейс через 'Управление курсами'", show_alert=True)
+    return
     
+    # СТАРЫЙ КОД ЗАКОММЕНТИРОВАН
     course_id = int(callback.data.split("_")[2])
     db: Session = get_db()
     
@@ -975,6 +1290,9 @@ async def download_analytics(callback: CallbackQuery):
     db: Session = get_db()
     
     try:
+        # Импортируем функции для работы с данными
+        from data import get_all_guides
+        
         # Создаем Excel файл
         wb = Workbook()
         
@@ -1044,9 +1362,9 @@ async def download_analytics(callback: CallbackQuery):
             ('Выручка за месяц, ₽', f'{month_revenue:,.2f}'),
             ('', ''),
             ('КОНТЕНТ', ''),
-            ('Курсов', db.query(Course).count()),
-            ('Консультаций', db.query(Consultation).count()),
-            ('Уроков', db.query(Lesson).count()),
+            ('Курсов', len(get_all_courses())),
+            ('Консультаций', len(get_all_consultations())),
+            ('Гайдов', len(get_all_guides())),
         ]
         
         row = 4
@@ -1109,12 +1427,20 @@ async def download_analytics(callback: CallbackQuery):
             username = user.username if user.username else f"{user.first_name or 'Пользователь'}"
             
             product_name = '-'
-            if payment.course_id:
-                course = db.query(Course).filter(Course.id == payment.course_id).first()
-                product_name = f"Курс: {course.name}" if course else "Курс"
-            elif payment.consultation_id:
-                consultation = db.query(Consultation).filter(Consultation.id == payment.consultation_id).first()
-                product_name = f"Консультация: {consultation.name}" if consultation else "Консультация"
+            # Определяем тип продукта и название из новой структуры
+            from data import get_course_by_slug, get_consultation_by_slug, get_guide_by_id
+            
+            if payment.product_type == 'course' and payment.course_slug:
+                course = get_course_by_slug(payment.course_slug)
+                product_name = f"Курс: {course['name']}" if course else "Курс"
+            elif payment.product_type == 'consultation' and payment.consultation_slug:
+                consultation = get_consultation_by_slug(payment.consultation_slug)
+                product_name = f"Консультация: {consultation['name']}" if consultation else "Консультация"
+            elif payment.product_type == 'guide' and payment.product_id:
+                guide = get_guide_by_id(payment.product_id)
+                product_name = f"Гайд: {guide['name']}" if guide else "Гайд"
+            else:
+                product_name = payment.product_type or "Неизвестно"
             
             ws_payments.cell(row, 1, payment.id)
             ws_payments.cell(row, 2, username)
@@ -1127,43 +1453,6 @@ async def download_analytics(callback: CallbackQuery):
         # Автоширина
         for col, width in zip(['A', 'B', 'C', 'D', 'E', 'F', 'G'], [8, 20, 30, 12, 12, 18, 18]):
             ws_payments.column_dimensions[col].width = width
-        
-        # Лист 4: Курсы и их популярность
-        ws_courses = wb.create_sheet("Курсы")
-        
-        headers = ['ID', 'Название', 'Уроков', 'Тарифов', 'Продаж', 'Выручка, ₽', 'Активен']
-        for col, header in enumerate(headers, 1):
-            cell = ws_courses.cell(1, col, header)
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = Alignment(horizontal='center')
-        
-        courses = db.query(Course).all()
-        
-        for row, course in enumerate(courses, 2):
-            lessons_count = db.query(Lesson).filter(Lesson.course_id == course.id).count()
-            tariffs_count = len(course.tariffs)
-            
-            sales_count = db.query(Payment).filter(
-                Payment.course_id == course.id,
-                Payment.status == 'succeeded'
-            ).count()
-            
-            revenue = db.query(func.sum(Payment.amount)).filter(
-                Payment.course_id == course.id,
-                Payment.status == 'succeeded'
-            ).scalar() or 0
-            
-            ws_courses.cell(row, 1, course.id)
-            ws_courses.cell(row, 2, course.name)
-            ws_courses.cell(row, 3, lessons_count)
-            ws_courses.cell(row, 4, tariffs_count)
-            ws_courses.cell(row, 5, sales_count)
-            ws_courses.cell(row, 6, revenue)
-            ws_courses.cell(row, 7, 'Да' if course.is_active else 'Нет')
-        
-        for col, width in zip(['A', 'B', 'C', 'D', 'E', 'F', 'G'], [8, 30, 10, 10, 10, 15, 10]):
-            ws_courses.column_dimensions[col].width = width
         
         # Сохраняем в буфер
         buffer = BytesIO()
@@ -1185,8 +1474,7 @@ async def download_analytics(callback: CallbackQuery):
                    "Файл содержит:\n"
                    "• Общую статистику\n"
                    "• Список всех пользователей\n"
-                   "• Все покупки\n"
-                   "• Аналитику по курсам"
+                   "• Все покупки"
         )
         
         # Удаляем временный файл
@@ -1208,258 +1496,144 @@ async def show_consultations_management(callback: CallbackQuery):
         await callback.answer("❌ Доступ запрещен", show_alert=True)
         return
     
-    db: Session = get_db()
+    consultations = get_all_consultations()
     
-    try:
-        consultations = db.query(Consultation).order_by(Consultation.order).all()
+    if not consultations:
+        await callback.message.edit_text(
+            "🔮 <b>Консультации отсутствуют</b>\n\n"
+            "Консультации хранятся в data/consultations.json",
+            reply_markup=get_back_to_admin_keyboard()
+        )
+    else:
+        buttons = []
+        for cons in consultations:
+            # Определяем текст цены
+            if cons.get('options'):
+                price_text = "Варианты"
+            elif cons.get('price'):
+                price_text = f"{cons['price']:,.0f} ₽"
+            else:
+                price_text = "Цена не указана"
+            
+            status_emoji = "✅" if cons.get('is_active', True) else "❌"
+            buttons.append([InlineKeyboardButton(
+                text=f"{cons.get('emoji', '🔮')} {cons['name']} ({price_text}) {status_emoji}",
+                callback_data=f"manage_consultation_{cons['slug']}"
+            )])
         
-        if not consultations:
-            await callback.message.edit_text(
-                "🔮 <b>Консультации отсутствуют</b>\n\n"
-                "Создайте консультации через utils/admin.py",
-                reply_markup=get_back_to_admin_keyboard()
-            )
-        else:
-            buttons = []
-            for cons in consultations:
-                status_emoji = "✅" if cons.is_active else "❌"
-                price_text = f"{cons.price:,.0f} ₽" if cons.price else "Варианты"
-                buttons.append([InlineKeyboardButton(
-                    text=f"{cons.emoji} {cons.name} ({price_text}) {status_emoji}",
-                    callback_data=f"manage_consultation_{cons.id}"
-                )])
-            
-            buttons.append([InlineKeyboardButton(
-                text="➕ Создать новую консультацию",
-                callback_data="create_consultation"
-            )])
-            buttons.append([InlineKeyboardButton(
-                text="◀️ Назад в админ-панель",
-                callback_data="admin_panel"
-            )])
-            
-            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-            
-            await callback.message.edit_text(
-                "🔮 <b>Управление консультациями</b>\n\n"
-                "Выберите консультацию для редактирования или создайте новую:",
-                reply_markup=keyboard
-            )
-    
-    finally:
-        db.close()
+        buttons.append([InlineKeyboardButton(
+            text="◀️ Назад в админ-панель",
+            callback_data="admin_panel"
+        )])
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        
+        await callback.message.edit_text(
+            "🔮 <b>Управление консультациями</b>\n\n"
+            "Просмотр консультаций. Для редактирования используйте файл data/consultations.json",
+            reply_markup=keyboard
+        )
     
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("manage_consultation_"))
 async def manage_consultation(callback: CallbackQuery):
-    """Управление конкретной консультацией"""
+    """Просмотр конкретной консультации"""
     if not is_admin(callback.from_user.id):
         await callback.answer("❌ Доступ запрещен", show_alert=True)
         return
     
-    cons_id = int(callback.data.split("_")[2])
-    db: Session = get_db()
+    from data import get_consultation_by_slug
     
-    try:
-        cons = db.query(Consultation).filter(Consultation.id == cons_id).first()
-        
-        if not cons:
-            await callback.answer("Консультация не найдена", show_alert=True)
-            return
-        
-        text = f"🔮 <b>{cons.name}</b>\n\n"
-        text += f"📍 Slug: <code>{cons.slug}</code>\n"
-        text += f"💰 Цена: {cons.price:,.0f} ₽\n" if cons.price else "💰 Цена: варианты\n"
-        text += f"⏱ Длительность: {cons.duration}\n" if cons.duration else ""
-        text += f"📂 Категория: {cons.category}\n"
-        text += f"🔄 Порядок: {cons.order}\n"
-        text += f"✅ Активна: {'Да' if cons.is_active else 'Нет'}\n"
-        
-        if cons.options:
-            text += f"\n📋 Вариантов: {len(cons.options)}\n"
-            for opt in cons.options:
-                text += f"  • {opt.name}: {opt.price:,.0f} ₽\n"
-        
-        buttons = [
-            [InlineKeyboardButton(text="✏️ Изменить название", callback_data=f"edit_cons_name_{cons_id}")],
-            [InlineKeyboardButton(text="💰 Изменить цену", callback_data=f"edit_cons_price_{cons_id}")],
-            [InlineKeyboardButton(text="⏱ Изменить длительность", callback_data=f"edit_cons_duration_{cons_id}")],
-            [InlineKeyboardButton(text="📝 Изменить описание", callback_data=f"edit_cons_desc_{cons_id}")],
-            [InlineKeyboardButton(
-                text=f"{'❌ Деактивировать' if cons.is_active else '✅ Активировать'}",
-                callback_data=f"toggle_cons_{cons_id}"
-            )],
-            [InlineKeyboardButton(text="◀️ Назад к консультациям", callback_data="admin_consultations")]
-        ]
-        
-        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-        
-        await callback.message.edit_text(text, reply_markup=keyboard)
+    cons_slug = callback.data.replace("manage_consultation_", "")
+    cons = get_consultation_by_slug(cons_slug)
     
-    finally:
-        db.close()
+    if not cons:
+        await callback.answer("Консультация не найдена", show_alert=True)
+        return
     
+    text = f"🔮 <b>{cons['name']}</b>\n\n"
+    text += f"📍 Slug: <code>{cons['slug']}</code>\n"
+    
+    if cons.get('price'):
+        text += f"💰 Цена: {cons['price']:,.0f} ₽\n"
+    
+    if cons.get('duration'):
+        text += f"⏱ Длительность: {cons['duration']}\n"
+    
+    if cons.get('category'):
+        text += f"📂 Категория: {cons['category']}\n"
+    
+    text += f"✅ Активна: {'Да' if cons.get('is_active', True) else 'Нет'}\n"
+    
+    if cons.get('options'):
+        text += f"\n📋 Вариантов: {len(cons['options'])}\n"
+        for opt in cons['options']:
+            if opt.get('is_active', True):
+                text += f"  • {opt['name']}: {opt['price']:,.0f} ₽\n"
+    
+    text += "\n\n<i>Для редактирования измените data/consultations.json</i>"
+    
+    buttons = [
+        [InlineKeyboardButton(text="◀️ Назад к консультациям", callback_data="admin_consultations")]
+    ]
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+    await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("toggle_cons_"))
 async def toggle_consultation(callback: CallbackQuery):
-    """Переключить активность консультации"""
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Доступ запрещен", show_alert=True)
-        return
-    
-    cons_id = int(callback.data.split("_")[2])
-    db: Session = get_db()
-    
-    try:
-        cons = db.query(Consultation).filter(Consultation.id == cons_id).first()
-        cons.is_active = not cons.is_active
-        db.commit()
-        
-        await callback.answer(f"✅ Консультация {'активирована' if cons.is_active else 'деактивирована'}!")
-        
-        # Обновляем сообщение
-        await manage_consultation(callback)
-    
-    finally:
-        db.close()
+    """Переключить активность консультации - заглушка"""
+    await callback.answer("⚠️ Редактирование через data/consultations.json", show_alert=True)
 
 
-@router.callback_query(F.data.startswith("edit_cons_name_"))
-async def edit_consultation_name_start(callback: CallbackQuery, state: FSMContext):
-    """Начало редактирования названия консультации"""
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Доступ запрещен", show_alert=True)
-        return
-    
-    cons_id = int(callback.data.split("_")[3])
-    await state.update_data(editing_cons_id=cons_id)
-    
-    db: Session = get_db()
-    try:
-        cons = db.query(Consultation).filter(Consultation.id == cons_id).first()
-        
-        cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_consultation_{cons_id}")]
-        ])
-        
-        await callback.message.edit_text(
-            f"✏️ <b>Редактирование названия консультации</b>\n\n"
-            f"Текущее название: <b>{cons.name}</b>\n\n"
-            f"Отправьте новое название:",
-            reply_markup=cancel_keyboard
-        )
-        
-        await state.set_state(ConsultationManagement.editing_name)
-    
-    finally:
-        db.close()
-    
+# Редактирование консультаций через JSON файлы
+
+@router.callback_query(F.data.startswith("edit_cons_"))
+async def edit_consultation_help(callback: CallbackQuery):
+    """Информация о редактировании консультаций"""
+    await callback.message.answer(
+        "ℹ️ <b>Редактирование консультаций</b>\n\n"
+        "Консультации хранятся в файле:\n"
+        "<code>data/consultations.json</code>\n\n"
+        "Для редактирования:\n"
+        "1. Откройте файл в редакторе\n"
+        "2. Измените нужные поля\n"
+        "3. Сохраните файл\n"
+        "4. Перезапустите бота\n\n"
+        "📝 Доступные поля:\n"
+        "• name - название\n"
+        "• price - цена\n"
+        "• duration - длительность\n"
+        "• description - описание\n"
+        "• is_active - активна/неактивна\n"
+        "• options - варианты консультации"
+    )
     await callback.answer()
 
 
-@router.message(ConsultationManagement.editing_name)
-async def edit_consultation_name_save(message: Message, state: FSMContext):
-    """Сохранение нового названия консультации"""
-    if not is_admin(message.from_user.id):
-        return
-    
-    data = await state.get_data()
-    cons_id = data['editing_cons_id']
-    
-    db: Session = get_db()
-    try:
-        cons = db.query(Consultation).filter(Consultation.id == cons_id).first()
-        cons.name = message.text.strip()
-        db.commit()
-        
-        back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="◀️ Назад к консультации", callback_data=f"manage_consultation_{cons_id}")]
-        ])
-        
-        await message.answer(
-            f"✅ Название обновлено!\n\n"
-            f"Новое название: <b>{cons.name}</b>",
-            reply_markup=back_keyboard
-        )
-    
-    finally:
-        db.close()
-        await state.clear()
-
-
-@router.callback_query(F.data.startswith("edit_cons_price_"))
-async def edit_consultation_price_start(callback: CallbackQuery, state: FSMContext):
-    """Начало редактирования цены консультации"""
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Доступ запрещен", show_alert=True)
-        return
-    
-    cons_id = int(callback.data.split("_")[3])
-    await state.update_data(editing_cons_id=cons_id)
-    
-    db: Session = get_db()
-    try:
-        cons = db.query(Consultation).filter(Consultation.id == cons_id).first()
-        
-        cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_consultation_{cons_id}")]
-        ])
-        
-        current_price = f"{cons.price:,.0f} ₽" if cons.price else "Не указана"
-        
-        await callback.message.edit_text(
-            f"💰 <b>Редактирование цены консультации</b>\n\n"
-            f"Текущая цена: {current_price}\n\n"
-            f"Отправьте новую цену (только число):",
-            reply_markup=cancel_keyboard
-        )
-        
-        await state.set_state(ConsultationManagement.editing_price)
-    
-    finally:
-        db.close()
-    
+@router.callback_query(F.data.startswith("create_consultation"))
+async def create_consultation_help(callback: CallbackQuery):
+    """Информация о создании консультаций"""
+    await callback.message.edit_text(
+        "ℹ️ <b>Создание консультации</b>\n\n"
+        "Консультации хранятся в файле:\n"
+        "<code>data/consultations.json</code>\n\n"
+        "Для создания новой консультации:\n"
+        "1. Откройте файл в редакторе\n"
+        "2. Скопируйте структуру существующей консультации\n"
+        "3. Измените поля под новую консультацию\n"
+        "4. Не забудьте уникальный slug\n"
+        "5. Сохраните файл\n"
+        "6. Перезапустите бота\n\n"
+        "📋 Пример структуры в документации DATA_MANAGEMENT.md",
+        reply_markup=get_back_to_admin_keyboard()
+    )
     await callback.answer()
-
-
-@router.message(ConsultationManagement.editing_price)
-async def edit_consultation_price_save(message: Message, state: FSMContext):
-    """Сохранение новой цены консультации"""
-    if not is_admin(message.from_user.id):
-        return
-    
-    data = await state.get_data()
-    cons_id = data['editing_cons_id']
-    
-    try:
-        new_price = float(message.text.strip().replace(',', '.'))
-    except ValueError:
-        await message.answer("❌ Неверный формат. Введите число (например: 15000 или 15000.50)")
-        return
-    
-    db: Session = get_db()
-    try:
-        cons = db.query(Consultation).filter(Consultation.id == cons_id).first()
-        cons.price = new_price
-        db.commit()
-        
-        back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="◀️ Назад к консультации", callback_data=f"manage_consultation_{cons_id}")]
-        ])
-        
-        await message.answer(
-            f"✅ Цена обновлена!\n\n"
-            f"Новая цена: {new_price:,.0f} ₽",
-            reply_markup=back_keyboard
-        )
-    
-    finally:
-        db.close()
-        await state.clear()
 
 
 # Управление гайдами вынесено в отдельный модуль handlers/admin_guides.py
@@ -1610,202 +1784,6 @@ async def create_course_save(message: Message, state: FSMContext):
         await state.clear()
 
 
-@router.callback_query(F.data == "create_consultation")
-async def create_consultation_start(callback: CallbackQuery, state: FSMContext):
-    """Начало создания новой консультации"""
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Доступ запрещен", show_alert=True)
-        return
-    
-    cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_consultations")]
-    ])
-    
-    await callback.message.edit_text(
-        "➕ <b>Создание новой консультации</b>\n\n"
-        "Шаг 1/6: Введите название консультации:",
-        reply_markup=cancel_keyboard
-    )
-    
-    await state.set_state(ConsultationManagement.creating_name)
-    await callback.answer()
-
-
-@router.message(ConsultationManagement.creating_name)
-async def create_consultation_name(message: Message, state: FSMContext):
-    """Получение названия консультации"""
-    if not is_admin(message.from_user.id):
-        return
-    
-    await state.update_data(cons_name=message.text.strip())
-    
-    cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_consultations")]
-    ])
-    
-    await message.answer(
-        f"✅ Название: <b>{message.text.strip()}</b>\n\n"
-        f"Шаг 2/6: Введите slug (для URL, например: natal-chart):",
-        reply_markup=cancel_keyboard
-    )
-    
-    await state.set_state(ConsultationManagement.creating_slug)
-
-
-@router.message(ConsultationManagement.creating_slug)
-async def create_consultation_slug(message: Message, state: FSMContext):
-    """Получение slug консультации"""
-    if not is_admin(message.from_user.id):
-        return
-    
-    slug = message.text.strip().lower().replace(' ', '-')
-    
-    # Проверяем уникальность
-    db: Session = get_db()
-    try:
-        existing = db.query(Consultation).filter(Consultation.slug == slug).first()
-        if existing:
-            await message.answer("❌ Консультация с таким slug уже существует. Введите другой:")
-            return
-    finally:
-        db.close()
-    
-    await state.update_data(cons_slug=slug)
-    
-    cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_consultations")]
-    ])
-    
-    await message.answer(
-        f"✅ Slug: <code>{slug}</code>\n\n"
-        f"Шаг 3/6: Введите эмодзи (один символ, например: 🌟):",
-        reply_markup=cancel_keyboard
-    )
-    
-    await state.set_state(ConsultationManagement.creating_emoji)
-
-
-@router.message(ConsultationManagement.creating_emoji)
-async def create_consultation_emoji(message: Message, state: FSMContext):
-    """Получение эмодзи консультации"""
-    if not is_admin(message.from_user.id):
-        return
-    
-    await state.update_data(cons_emoji=message.text.strip())
-    
-    cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_consultations")]
-    ])
-    
-    await message.answer(
-        f"✅ Эмодзи: {message.text.strip()}\n\n"
-        f"Шаг 4/6: Введите цену (только число, например: 15000):",
-        reply_markup=cancel_keyboard
-    )
-    
-    await state.set_state(ConsultationManagement.creating_price)
-
-
-@router.message(ConsultationManagement.creating_price)
-async def create_consultation_price(message: Message, state: FSMContext):
-    """Получение цены консультации"""
-    if not is_admin(message.from_user.id):
-        return
-    
-    try:
-        price = float(message.text.strip().replace(',', '.'))
-    except ValueError:
-        await message.answer("❌ Неверный формат. Введите число:")
-        return
-    
-    await state.update_data(cons_price=price)
-    
-    cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_consultations")]
-    ])
-    
-    await message.answer(
-        f"✅ Цена: {price:,.0f} ₽\n\n"
-        f"Шаг 5/6: Введите длительность (например: 90 минут):",
-        reply_markup=cancel_keyboard
-    )
-    
-    await state.set_state(ConsultationManagement.creating_duration)
-
-
-@router.message(ConsultationManagement.creating_duration)
-async def create_consultation_duration(message: Message, state: FSMContext):
-    """Получение длительности консультации"""
-    if not is_admin(message.from_user.id):
-        return
-    
-    await state.update_data(cons_duration=message.text.strip())
-    
-    cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_consultations")]
-    ])
-    
-    await message.answer(
-        f"✅ Длительность: {message.text.strip()}\n\n"
-        f"Шаг 6/6: Введите описание консультации:",
-        reply_markup=cancel_keyboard
-    )
-    
-    await state.set_state(ConsultationManagement.creating_description)
-
-
-@router.message(ConsultationManagement.creating_description)
-async def create_consultation_save(message: Message, state: FSMContext):
-    """Сохранение новой консультации"""
-    if not is_admin(message.from_user.id):
-        return
-    
-    data = await state.get_data()
-    
-    db: Session = get_db()
-    try:
-        # Получаем максимальный order
-        max_order = db.query(func.max(Consultation.order)).scalar() or 0
-        
-        new_cons = Consultation(
-            name=data['cons_name'],
-            slug=data['cons_slug'],
-            emoji=data['cons_emoji'],
-            description=message.text.strip(),
-            short_description=message.text.strip()[:200],
-            price=data['cons_price'],
-            duration=data['cons_duration'],
-            is_active=True,
-            order=max_order + 1,
-            category='consultation'
-        )
-        
-        db.add(new_cons)
-        db.commit()
-        db.refresh(new_cons)
-        
-        back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"manage_consultation_{new_cons.id}")],
-            [InlineKeyboardButton(text="◀️ К списку консультаций", callback_data="admin_consultations")]
-        ])
-        
-        await message.answer(
-            f"✅ <b>Консультация успешно создана!</b>\n\n"
-            f"{new_cons.emoji} {new_cons.name}\n"
-            f"💰 {new_cons.price:,.0f} ₽\n"
-            f"⏱ {new_cons.duration}\n"
-            f"🔗 Slug: <code>{new_cons.slug}</code>",
-            reply_markup=back_keyboard
-        )
-    
-    except Exception as e:
-        await message.answer(f"❌ Ошибка при создании консультации: {str(e)}")
-    
-    finally:
-        db.close()
-        await state.clear()
-
-
 # ==================== СОЗДАНИЕ ПЛАТЕЖНОЙ ССЫЛКИ ====================
 
 @router.callback_query(F.data == "admin_create_payment_link")
@@ -1839,7 +1817,7 @@ async def process_user_id(message: Message, state: FSMContext):
         # Проверяем, это ID или username
         if user_input.startswith('@'):
             username = user_input[1:]  # Убираем @
-            user = db.query(User).filter(User.telegram_username == username).first()
+            user = db.query(User).filter(User.username == username).first()
         else:
             try:
                 telegram_id = int(user_input)
@@ -1859,46 +1837,17 @@ async def process_user_id(message: Message, state: FSMContext):
         await state.update_data(
             user_id=user.id,
             telegram_id=user.telegram_id,
-            user_name=user.full_name or user.telegram_username or f"ID{user.telegram_id}"
+            user_name=user.first_name or user.username or f"ID{user.telegram_id}"
         )
         
-        # Показываем выбор типа продукта
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔮 Консультация", callback_data="payment_link_consultation")],
-            [InlineKeyboardButton(text="📚 Курс", callback_data="payment_link_course")],
-            [InlineKeyboardButton(text="💝 Гайд", callback_data="payment_link_guide")],
-            [InlineKeyboardButton(text="◀️ Отмена", callback_data="admin")]
-        ])
+        # Сохраняем тип продукта как консультация
+        await state.update_data(product_type='consultation')
         
-        await message.answer(
-            f"✅ Пользователь найден: <b>{user.full_name or user.telegram_username}</b>\n"
-            f"ID: <code>{user.telegram_id}</code>\n\n"
-            "Выберите тип продукта:",
-            reply_markup=keyboard
-        )
-        
-        await state.set_state(PaymentLinkCreation.waiting_for_product_type)
-    
-    finally:
-        db.close()
-
-
-@router.callback_query(F.data.startswith("payment_link_"))
-async def process_product_type(callback: CallbackQuery, state: FSMContext):
-    """Обработка выбора типа продукта"""
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Нет доступа")
-        return
-    
-    product_type = callback.data.replace("payment_link_", "")
-    await state.update_data(product_type=product_type)
-    
-    if product_type == "consultation":
-        # Показываем список консультаций
+        # Показываем список консультаций сразу
         consultations = get_all_consultations()
         
         if not consultations:
-            await callback.message.edit_text(
+            await message.answer(
                 "❌ Нет доступных консультаций",
                 reply_markup=get_back_to_admin_keyboard()
             )
@@ -1912,51 +1861,18 @@ async def process_product_type(callback: CallbackQuery, state: FSMContext):
                 callback_data=f"paylink_cons_{cons['slug']}"
             )])
         
-        buttons.append([InlineKeyboardButton(text="◀️ Отмена", callback_data="admin")])
+        buttons.append([InlineKeyboardButton(text="◀️ Отмена", callback_data="admin_panel")])
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
         
-        await callback.message.edit_text(
+        await message.answer(
+            f"✅ Пользователь найден: <b>{user.first_name or user.username or 'Пользователь'}</b>\n"
+            f"ID: <code>{user.telegram_id}</code>\n\n"
             "🔮 Выберите консультацию:",
             reply_markup=keyboard
         )
     
-    elif product_type == "course":
-        # Показываем список курсов
-        courses = get_all_courses()
-        
-        if not courses:
-            await callback.message.edit_text(
-                "❌ Нет доступных курсов",
-                reply_markup=get_back_to_admin_keyboard()
-            )
-            await state.clear()
-            return
-        
-        buttons = []
-        for course in courses:
-            buttons.append([InlineKeyboardButton(
-                text=f"{course.get('emoji', '📚')} {course['name']}",
-                callback_data=f"paylink_course_{course['slug']}"
-            )])
-        
-        buttons.append([InlineKeyboardButton(text="◀️ Отмена", callback_data="admin")])
-        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-        
-        await callback.message.edit_text(
-            "📚 Выберите курс:",
-            reply_markup=keyboard
-        )
-    
-    else:
-        # Для гайда просим ввести сумму
-        await callback.message.edit_text(
-            "💝 Введите стоимость гайда в рублях:\n\n"
-            "<i>Например: 1000</i>",
-            reply_markup=get_back_to_admin_keyboard()
-        )
-        await state.set_state(PaymentLinkCreation.waiting_for_amount)
-    
-    await callback.answer()
+    finally:
+        db.close()
 
 
 @router.callback_query(F.data.startswith("paylink_cons_"))
@@ -1992,7 +1908,7 @@ async def process_consultation_selection(callback: CallbackQuery, state: FSMCont
                     callback_data=f"paylink_option_{option['id']}"
                 )])
         
-        buttons.append([InlineKeyboardButton(text="◀️ Отмена", callback_data="admin")])
+        buttons.append([InlineKeyboardButton(text="◀️ Отмена", callback_data="admin_panel")])
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
         
         await callback.message.edit_text(
@@ -2049,88 +1965,6 @@ async def process_option_selection(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("paylink_course_"))
-async def process_course_selection(callback: CallbackQuery, state: FSMContext):
-    """Обработка выбора курса"""
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Нет доступа")
-        return
-    
-    from data import get_course_by_slug
-    
-    course_slug = callback.data.replace("paylink_course_", "")
-    course = get_course_by_slug(course_slug)
-    
-    if not course:
-        await callback.answer("❌ Курс не найден", show_alert=True)
-        return
-    
-    await state.update_data(
-        course_slug=course_slug,
-        course_name=course['name']
-    )
-    
-    # Показываем тарифы
-    tariffs = course.get('tariffs', [])
-    
-    if tariffs:
-        buttons = []
-        for tariff in tariffs:
-            if tariff.get('is_active', True):
-                buttons.append([InlineKeyboardButton(
-                    text=f"{tariff['name']} - {tariff['price']:,.0f} ₽",
-                    callback_data=f"paylink_tariff_{tariff['id']}"
-                )])
-        
-        buttons.append([InlineKeyboardButton(text="◀️ Отмена", callback_data="admin")])
-        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-        
-        await callback.message.edit_text(
-            f"📚 {course['name']}\n\n"
-            "Выберите тариф:",
-            reply_markup=keyboard
-        )
-    else:
-        await callback.message.edit_text(
-            "❌ Нет доступных тарифов",
-            reply_markup=get_back_to_admin_keyboard()
-        )
-        await state.clear()
-    
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("paylink_tariff_"))
-async def process_tariff_selection(callback: CallbackQuery, state: FSMContext):
-    """Обработка выбора тарифа курса"""
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Нет доступа")
-        return
-    
-    from data import get_course_by_slug, get_tariff_by_id
-    
-    tariff_id = callback.data.replace("paylink_tariff_", "")
-    
-    data = await state.get_data()
-    course_slug = data.get('course_slug')
-    
-    tariff = get_tariff_by_id(course_slug, tariff_id)
-    
-    if not tariff:
-        await callback.answer("❌ Тариф не найден", show_alert=True)
-        return
-    
-    await state.update_data(
-        tariff_id=tariff_id,
-        amount=tariff['price'],
-        tariff_name=tariff['name']
-    )
-    
-    # Создаем платеж
-    await create_payment_link(callback.message, state)
-    await callback.answer()
-
-
 @router.message(StateFilter(PaymentLinkCreation.waiting_for_amount))
 async def process_amount(message: Message, state: FSMContext):
     """Обработка ввода суммы"""
@@ -2177,15 +2011,18 @@ async def create_payment_link(message: Message, state: FSMContext):
             description = f"Курс: {data.get('course_name')}"
             if data.get('tariff_name'):
                 description += f" - {data.get('tariff_name')}"
+        elif product_type == 'guide':
+            description = f"Гайд: {data.get('guide_name', 'Гайд')}"
         else:
-            description = "Гайд"
+            description = "Продукт"
         
         # Создаем платеж в БД
         payment = Payment(
             user_id=user_id,
             amount=amount,
             status='pending',
-            product_type=product_type
+            product_type=product_type,
+            is_payment_link=True  # Помечаем как платеж по ссылке
         )
         
         if product_type == 'consultation':

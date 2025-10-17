@@ -7,6 +7,7 @@ from config import config
 from database import get_db, User
 from data import get_active_guides, get_guide_by_id
 from keyboards import get_main_menu_keyboard, get_back_keyboard, get_guides_list_keyboard, get_guide_keyboard, get_about_me_keyboard
+from utils.bot_settings import get_setting, ABOUT_ME_VIDEO_KEY
 
 router = Router()
 
@@ -30,12 +31,29 @@ async def show_main_menu(callback: CallbackQuery):
                 parse_mode="Markdown"
             )
         except Exception:
-            # Если не можем отредактировать, отправляем новое сообщение
-            await callback.message.answer(
-                "🏠 **Главное меню**\n\nВыберите интересующий раздел:",
-                reply_markup=get_main_menu_keyboard(),
-                parse_mode="Markdown"
-            )
+            # Если не можем отредактировать
+            # Проверяем, это видео (приветствие) или фото (отзывы)
+            if callback.message.video:
+                # Если это приветственное видео - НЕ удаляем, просто отправляем новое меню
+                await callback.bot.send_message(
+                    chat_id=callback.message.chat.id,
+                    text="🏠 **Главное меню**\n\nВыберите интересующий раздел:",
+                    reply_markup=get_main_menu_keyboard(),
+                    parse_mode="Markdown"
+                )
+            else:
+                # Если это фото или другое сообщение - удаляем и отправляем новое
+                try:
+                    await callback.message.delete()
+                except Exception:
+                    pass
+                
+                await callback.bot.send_message(
+                    chat_id=callback.message.chat.id,
+                    text="🏠 **Главное меню**\n\nВыберите интересующий раздел:",
+                    reply_markup=get_main_menu_keyboard(),
+                    parse_mode="Markdown"
+                )
         await callback.answer()
     
     finally:
@@ -44,13 +62,42 @@ async def show_main_menu(callback: CallbackQuery):
 
 @router.callback_query(F.data == "about_me")
 async def show_about_me(callback: CallbackQuery):
-    """Показать информацию о преподавателе с кнопками соц. сетей"""
-    text = config.ABOUT_ME_TEXT + "\n\n📱 **Мои соц. сети:**"
-    await callback.message.edit_text(
-        text,
-        reply_markup=get_about_me_keyboard(),
-        parse_mode="Markdown"
-    )
+    """Показать информацию о преподавателе с видео-интервью и кнопками соц. сетей"""
+    
+    # Получаем file_id видео (сначала из БД, потом из config)
+    about_me_video_id = get_setting(ABOUT_ME_VIDEO_KEY) or config.ABOUT_ME_VIDEO_FILE_ID
+    
+    # Отправляем видео-интервью, если оно настроено
+    if about_me_video_id:
+        try:
+            # Удаляем предыдущее сообщение
+            await callback.message.delete()
+            
+            # Отправляем видео с текстом и кнопками
+            text = config.ABOUT_ME_TEXT + "\n\n📱 **Мои соц. сети:**"
+            await callback.message.answer_video(
+                video=about_me_video_id,
+                caption=text,
+                reply_markup=get_about_me_keyboard(),
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            # Если видео не отправилось, отправляем обычный текст
+            text = config.ABOUT_ME_TEXT + "\n\n📱 **Мои соц. сети:**"
+            await callback.message.edit_text(
+                text,
+                reply_markup=get_about_me_keyboard(),
+                parse_mode="Markdown"
+            )
+    else:
+        # Если видео не настроено, отправляем обычный текст
+        text = config.ABOUT_ME_TEXT + "\n\n📱 **Мои соц. сети:**"
+        await callback.message.edit_text(
+            text,
+            reply_markup=get_about_me_keyboard(),
+            parse_mode="Markdown"
+        )
+    
     await callback.answer()
 
 
@@ -85,12 +132,29 @@ async def show_guides_list(callback: CallbackQuery):
             parse_mode="Markdown"
         )
     except Exception:
-        # Если не можем отредактировать (например, сообщение с документом), отправляем новое
-        await callback.message.answer(
-            text,
-            reply_markup=get_guides_list_keyboard(),
-            parse_mode="Markdown"
-        )
+        # Если не можем отредактировать
+        # Проверяем, это видео или другое сообщение
+        if callback.message.video:
+            # Если видео - НЕ удаляем, просто отправляем новое
+            await callback.bot.send_message(
+                chat_id=callback.message.chat.id,
+                text=text,
+                reply_markup=get_guides_list_keyboard(),
+                parse_mode="Markdown"
+            )
+        else:
+            # Если это фото или другое - удаляем и отправляем новое
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+            
+            await callback.bot.send_message(
+                chat_id=callback.message.chat.id,
+                text=text,
+                reply_markup=get_guides_list_keyboard(),
+                parse_mode="Markdown"
+            )
     await callback.answer()
 
 

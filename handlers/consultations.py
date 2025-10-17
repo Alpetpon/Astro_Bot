@@ -31,19 +31,42 @@ async def show_consultations_catalog(callback: CallbackQuery):
         consultations = get_active_consultations()
         
         if not consultations:
-            await callback.message.edit_text(
-                "🔮 К сожалению, сейчас нет доступных консультаций.",
-                reply_markup=get_back_keyboard("main_menu")
-            )
+            text = "🔮 К сожалению, сейчас нет доступных консультаций."
+            markup = get_back_keyboard("main_menu")
         else:
             text = "🔮 **Консультационные услуги**\n\n"
             text += "Выберите интересующую вас услугу для получения подробной информации:"
-            
+            markup = get_consultations_keyboard(consultations)
+        
+        try:
             await callback.message.edit_text(
                 text,
-                reply_markup=get_consultations_keyboard(consultations),
+                reply_markup=markup,
                 parse_mode="Markdown"
             )
+        except Exception:
+            # Если не можем отредактировать
+            if callback.message.video:
+                # Если видео - НЕ удаляем
+                await callback.bot.send_message(
+                    chat_id=callback.message.chat.id,
+                    text=text,
+                    reply_markup=markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                # Если фото - удаляем и отправляем новое
+                try:
+                    await callback.message.delete()
+                except Exception:
+                    pass
+                
+                await callback.bot.send_message(
+                    chat_id=callback.message.chat.id,
+                    text=text,
+                    reply_markup=markup,
+                    parse_mode="Markdown"
+                )
         
         await callback.answer()
     

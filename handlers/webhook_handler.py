@@ -241,28 +241,62 @@ async def notify_admin_new_payment(bot: Bot, payment: Payment, db):
         user = payment.user
         
         text = "🔔 <b>Новый платеж!</b>\n\n"
-        text += f"👤 Пользователь: {user.full_name or 'Не указано'}\n"
+        
+        # Информация о пользователе
+        user_info = user.first_name or ""
+        if user.last_name:
+            user_info += f" {user.last_name}"
+        if user.username:
+            user_info += f" (@{user.username})"
+        if not user_info.strip():
+            user_info = "Не указано"
+        
+        text += f"👤 Пользователь: {user_info}\n"
+        text += f"🆔 Telegram ID: <code>{user.telegram_id}</code>\n"
         text += f"💰 Сумма: {payment.amount:,.0f} ₽\n"
+        
+        # Показываем, если оплата была по ссылке
+        if payment.is_payment_link:
+            text += f"🔗 <b>Оплата по сгенерированной ссылке</b>\n"
+        
         text += f"📦 Тип: {payment.product_type}\n"
         
         if payment.product_type == 'course':
             course = get_course_by_slug(payment.course_slug)
             if course:
                 text += f"📚 Курс: {course['name']}\n"
+                tariff = get_tariff_by_id(payment.course_slug, payment.tariff_id) if payment.tariff_id else None
+                if tariff:
+                    text += f"   Тариф: {tariff.get('name', 'Не указан')}\n"
         elif payment.product_type == 'consultation':
             consultation = get_consultation_by_slug(payment.consultation_slug)
             if consultation:
                 text += f"🔮 Консультация: {consultation['name']}\n"
+                # Ищем опцию консультации
+                if payment.consultation_option_id:
+                    options = consultation.get('options', [])
+                    option = next((opt for opt in options if opt.get('id') == payment.consultation_option_id), None)
+                    if option:
+                        text += f"   Опция: {option.get('name', 'Не указана')}\n"
         elif payment.product_type == 'guide':
             guide = get_guide_by_id(payment.product_id)
             if guide:
                 text += f"📖 Гайд: {guide['name']}\n"
         
         text += f"\n🆔 ID платежа: <code>{payment.payment_id}</code>"
+        text += f"\n📅 Дата: {payment.paid_at.strftime('%d.%m.%Y %H:%M') if payment.paid_at else 'Только что'}"
+        
+        # Добавляем кнопку для быстрого доступа к чату с пользователем (если есть username)
+        keyboard = None
+        if user.username:
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="💬 Написать пользователю", url=f"https://t.me/{user.username}")]
+            ])
         
         await bot.send_message(
             chat_id=config.ADMIN_ID,
-            text=text
+            text=text,
+            reply_markup=keyboard
         )
     
     except Exception as e:

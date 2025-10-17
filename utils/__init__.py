@@ -1,4 +1,6 @@
-from .admin import AdminPanel
+# utils/__init__.py
+# AdminPanel не используется - проект работает на JSON
+# Импорты добавляются по мере необходимости
 
-__all__ = ['AdminPanel']
+__all__ = []
 

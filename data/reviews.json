@@ -1,0 +1,46 @@
+{
+  "reviews": [
+    {
+      "id": "review_1",
+      "photo_id": "AgACAgIAAxkBAAIBdWjyd1TCeQjdrYhHBaSfxwV1baI9AAJ6AAEyG1DdmEsfLK1IU3fS7wEAAwIAA3kAAzYE",
+      "description": "Отзыв 1",
+      "is_active": true,
+      "order": 1
+    },
+    {
+      "id": "review_2",
+      "photo_id": "AgACAgIAAxkBAAIBSWjycMDgEMQCoMPxSsCx8OVI5TNdAAJE_zEbUN2QS4Q7WV_j-XzYAQADAgADeQADNgQ",
+      "description": "Отзыв 2",
+      "is_active": true,
+      "order": 2
+    },
+    {
+      "id": "review_3",
+      "photo_id": "AgACAgIAAxkBAAIBhWjyd7YAAWn7UFaKljuIDh5ny5rkmwACgAABMhtQ3ZhLAAFclguDEQlxAQADAgADeQADNgQ",
+      "description": "Отзыв 3",
+      "is_active": true,
+      "order": 3
+    },
+    {
+      "id": "review_4",
+      "photo_id": "AgACAgIAAxkBAAIBh2jyd8ojEj66B96FKz5rplGT_CptAAKBAAEyG1DdmEt6gUjRHj5ODgEAAwIAA3kAAzYE",
+      "description": "Отзыв 4",
+      "is_active": true,
+      "order": 4
+    },
+    {
+      "id": "review_5",
+      "photo_id": "AgACAgIAAxkBAAIBiWjyd9mC1b1d9je5mRdjh9WkBu6VAAKCAAEyG1DdmEv8E5WteoslDgEAAwIAA3kAAzYE",
+      "description": "Отзыв 5",
+      "is_active": true,
+      "order": 5
+    },
+    {
+      "id": "review_34_1760720893",
+      "description": "!@34",
+      "photo_id": "AgACAgIAAxkBAAIBlWjyeBdo1S2vSwGRtml6O4E15uswAAKEAAEyG1DdmEvFjJrqJl1fGgEAAwIAA3kAAzYE",
+      "order": 6,
+      "is_active": true
+    }
+  ]
+}

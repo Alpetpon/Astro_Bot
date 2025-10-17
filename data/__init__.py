@@ -226,6 +226,65 @@ def delete_guide(guide_id: str) -> bool:
     return False
 
 
+# ==================== Отзывы ====================
+
+def get_all_reviews() -> List[Dict]:
+    """Получить все отзывы из JSON"""
+    data = load_json('reviews.json')
+    return data.get('reviews', [])
+
+
+def get_review_by_id(review_id: str) -> Optional[Dict]:
+    """Получить отзыв по ID"""
+    reviews = get_all_reviews()
+    for review in reviews:
+        if review['id'] == review_id:
+            return review
+    return None
+
+
+def get_active_reviews() -> List[Dict]:
+    """Получить активные отзывы из JSON"""
+    reviews = get_all_reviews()
+    return [r for r in reviews if r.get('is_active', True)]
+
+
+def save_reviews(reviews: List[Dict]) -> None:
+    """Сохранить отзывы в JSON"""
+    data = {'reviews': reviews}
+    save_json('reviews.json', data)
+
+
+def save_review(review: Dict) -> None:
+    """Сохранить/обновить один отзыв"""
+    reviews = get_all_reviews()
+    
+    # Ищем существующий отзыв
+    found = False
+    for i, r in enumerate(reviews):
+        if r['id'] == review['id']:
+            reviews[i] = review
+            found = True
+            break
+    
+    # Если не найден - добавляем
+    if not found:
+        reviews.append(review)
+    
+    save_reviews(reviews)
+
+
+def delete_review(review_id: str) -> bool:
+    """Удалить отзыв"""
+    reviews = get_all_reviews()
+    new_reviews = [r for r in reviews if r['id'] != review_id]
+    
+    if len(new_reviews) < len(reviews):
+        save_reviews(new_reviews)
+        return True
+    return False
+
+
 # ==================== Материалы курсов ====================
 
 def get_course_materials(course_slug: str) -> Optional[Dict]:
@@ -267,6 +326,116 @@ def get_lesson_by_id(course_slug: str, module_id: str, lesson_id: str) -> Option
     return None
 
 
+def save_course_materials(course_slug: str, materials: Dict) -> None:
+    """Сохранить материалы курса"""
+    try:
+        data = load_json('course_materials.json')
+    except:
+        data = {'materials': {}}
+    
+    if 'materials' not in data:
+        data['materials'] = {}
+    
+    data['materials'][course_slug] = materials
+    save_json('course_materials.json', data)
+
+
+def add_module_to_course(course_slug: str, module: Dict) -> None:
+    """Добавить модуль к курсу"""
+    materials = get_course_materials(course_slug)
+    if not materials:
+        materials = {'modules': []}
+    
+    if 'modules' not in materials:
+        materials['modules'] = []
+    
+    materials['modules'].append(module)
+    save_course_materials(course_slug, materials)
+
+
+def update_module(course_slug: str, module_id: str, updated_module: Dict) -> bool:
+    """Обновить модуль"""
+    materials = get_course_materials(course_slug)
+    if not materials or 'modules' not in materials:
+        return False
+    
+    for i, module in enumerate(materials['modules']):
+        if module['id'] == module_id:
+            materials['modules'][i] = updated_module
+            save_course_materials(course_slug, materials)
+            return True
+    
+    return False
+
+
+def delete_module(course_slug: str, module_id: str) -> bool:
+    """Удалить модуль"""
+    materials = get_course_materials(course_slug)
+    if not materials or 'modules' not in materials:
+        return False
+    
+    original_len = len(materials['modules'])
+    materials['modules'] = [m for m in materials['modules'] if m['id'] != module_id]
+    
+    if len(materials['modules']) < original_len:
+        save_course_materials(course_slug, materials)
+        return True
+    
+    return False
+
+
+def add_lesson_to_module(course_slug: str, module_id: str, lesson: Dict) -> bool:
+    """Добавить урок в модуль"""
+    materials = get_course_materials(course_slug)
+    if not materials or 'modules' not in materials:
+        return False
+    
+    for module in materials['modules']:
+        if module['id'] == module_id:
+            if 'lessons' not in module:
+                module['lessons'] = []
+            module['lessons'].append(lesson)
+            save_course_materials(course_slug, materials)
+            return True
+    
+    return False
+
+
+def update_lesson(course_slug: str, module_id: str, lesson_id: str, updated_lesson: Dict) -> bool:
+    """Обновить урок"""
+    materials = get_course_materials(course_slug)
+    if not materials or 'modules' not in materials:
+        return False
+    
+    for module in materials['modules']:
+        if module['id'] == module_id:
+            for i, lesson in enumerate(module.get('lessons', [])):
+                if lesson['id'] == lesson_id:
+                    module['lessons'][i] = updated_lesson
+                    save_course_materials(course_slug, materials)
+                    return True
+    
+    return False
+
+
+def delete_lesson(course_slug: str, module_id: str, lesson_id: str) -> bool:
+    """Удалить урок"""
+    materials = get_course_materials(course_slug)
+    if not materials or 'modules' not in materials:
+        return False
+    
+    for module in materials['modules']:
+        if module['id'] == module_id:
+            original_len = len(module.get('lessons', []))
+            module['lessons'] = [l for l in module.get('lessons', []) if l['id'] != lesson_id]
+            
+            if len(module['lessons']) < original_len:
+                save_course_materials(course_slug, materials)
+                return True
+    
+    return False
+
+
 # Для удобства экспортируем функции
 __all__ = [
     # Чтение курсов
@@ -279,6 +448,14 @@ __all__ = [
     'get_course_modules',
     'get_module_by_id',
     'get_lesson_by_id',
+    # Редактирование материалов курсов
+    'save_course_materials',
+    'add_module_to_course',
+    'update_module',
+    'delete_module',
+    'add_lesson_to_module',
+    'update_lesson',
+    'delete_lesson',
     # Консультации
     'get_all_consultations',
     'get_consultation_by_slug',
@@ -289,6 +466,10 @@ __all__ = [
     'get_all_guides',
     'get_guide_by_id',
     'get_active_guides',
+    # Отзывы
+    'get_all_reviews',
+    'get_review_by_id',
+    'get_active_reviews',
     # Запись
     'save_course',
     'save_courses',
@@ -299,5 +480,8 @@ __all__ = [
     'save_guide',
     'save_guides',
     'delete_guide',
+    'save_review',
+    'save_reviews',
+    'delete_review',
 ]
 

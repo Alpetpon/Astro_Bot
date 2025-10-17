@@ -13,8 +13,11 @@ from handlers import (
     consultations_router,
     cabinet_router,
     payments_router,
+    reviews_router,
     admin_router,
-    admin_guides_router
+    admin_guides_router,
+    admin_reviews_router,
+    admin_video_router
 )
 from scheduler import setup_scheduler
 
@@ -54,9 +57,12 @@ async def main():
     dp.include_router(start_router)
     dp.include_router(admin_router)
     dp.include_router(admin_guides_router)
+    dp.include_router(admin_reviews_router)
+    dp.include_router(admin_video_router)
     dp.include_router(menu_router)
     dp.include_router(courses_router)
     dp.include_router(consultations_router)
+    dp.include_router(reviews_router)
     dp.include_router(payments_router)
     dp.include_router(cabinet_router)
     
