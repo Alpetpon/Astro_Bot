@@ -47,13 +47,13 @@ async def show_reviews_page_number(callback: CallbackQuery, page: int = 0):
         if not all_reviews:
             try:
                 await callback.message.edit_text(
-                    "⭐️ **Отзывы**\n\nПока здесь нет отзывов, но скоро они появятся!",
+                    "Пока здесь нет отзывов, но скоро они появятся!",
                     reply_markup=get_reviews_navigation_keyboard(page=0, total_pages=0),
                     parse_mode="Markdown"
                 )
             except Exception:
                 await callback.message.answer(
-                    "⭐️ **Отзывы**\n\nПока здесь нет отзывов, но скоро они появятся!",
+                    "Пока здесь нет отзывов, но скоро они появятся!",
                     reply_markup=get_reviews_navigation_keyboard(page=0, total_pages=0),
                     parse_mode="Markdown"
                 )
@@ -69,13 +69,13 @@ async def show_reviews_page_number(callback: CallbackQuery, page: int = 0):
         if not reviews_with_photos:
             try:
                 await callback.message.edit_text(
-                    "⭐️ **Отзывы**\n\nОтзывы с фотографиями пока не загружены!",
+                    "Отзывы с фотографиями пока не загружены!",
                     reply_markup=get_reviews_navigation_keyboard(page=0, total_pages=0),
                     parse_mode="Markdown"
                 )
             except Exception:
                 await callback.message.answer(
-                    "⭐️ **Отзывы**\n\nОтзывы с фотографиями пока не загружены!",
+                    "Отзывы с фотографиями пока не загружены!",
                     reply_markup=get_reviews_navigation_keyboard(page=0, total_pages=0),
                     parse_mode="Markdown"
                 )
@@ -99,9 +99,7 @@ async def show_reviews_page_number(callback: CallbackQuery, page: int = 0):
         try:
             await callback.message.edit_media(
                 media=InputMediaPhoto(
-                    media=current_review['photo_id'],
-                    caption=f"⭐️ **Отзывы** ({page + 1}/{total_pages})",
-                    parse_mode="Markdown"
+                    media=current_review['photo_id']
                 ),
                 reply_markup=get_reviews_navigation_keyboard(page=page, total_pages=total_pages)
             )
@@ -115,9 +113,7 @@ async def show_reviews_page_number(callback: CallbackQuery, page: int = 0):
             await callback.bot.send_photo(
                 chat_id=callback.message.chat.id,
                 photo=current_review['photo_id'],
-                caption=f"⭐️ **Отзывы** ({page + 1}/{total_pages})",
-                reply_markup=get_reviews_navigation_keyboard(page=page, total_pages=total_pages),
-                parse_mode="Markdown"
+                reply_markup=get_reviews_navigation_keyboard(page=page, total_pages=total_pages)
             )
         
         await callback.answer()
