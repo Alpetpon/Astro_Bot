@@ -21,11 +21,6 @@ async def show_reviews_page(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("reviews_page_"))
 async def show_reviews_page_handler(callback: CallbackQuery):
     """Обработчик переключения страниц отзывов"""
-    # Игнорируем нажатие на индикатор текущей страницы
-    if callback.data == "reviews_page_current":
-        await callback.answer()
-        return
-    
     page = int(callback.data.split("_")[-1])
     await show_reviews_page_number(callback, page=page)
 

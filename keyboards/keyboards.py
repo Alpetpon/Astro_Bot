@@ -429,12 +429,6 @@ def get_reviews_navigation_keyboard(page: int = 0, total_pages: int = 1) -> Inli
                 callback_data=f"reviews_page_{page - 1}"
             ))
         
-        # Индикатор страницы
-        nav_buttons.append(InlineKeyboardButton(
-            text=f"{page + 1}/{total_pages}",
-            callback_data="reviews_page_current"
-        ))
-        
         # Кнопка "Далее"
         if page < total_pages - 1:
             nav_buttons.append(InlineKeyboardButton(
@@ -442,7 +436,9 @@ def get_reviews_navigation_keyboard(page: int = 0, total_pages: int = 1) -> Inli
                 callback_data=f"reviews_page_{page + 1}"
             ))
         
-        buttons.append(nav_buttons)
+        # Добавляем только если есть хотя бы одна кнопка
+        if nav_buttons:
+            buttons.append(nav_buttons)
     
     # Кнопка перехода к курсам
     buttons.append([InlineKeyboardButton(text="📚 Курсы", callback_data="courses")])
