@@ -29,8 +29,8 @@ async def show_video_settings(callback: CallbackQuery):
         return
     
     # Проверяем наличие видео в БД
-    welcome_video = get_setting(WELCOME_VIDEO_KEY)
-    about_me_video = get_setting(ABOUT_ME_VIDEO_KEY)
+    welcome_video = await get_setting(WELCOME_VIDEO_KEY)
+    about_me_video = await get_setting(ABOUT_ME_VIDEO_KEY)
     
     has_welcome = bool(welcome_video)
     has_about_me = bool(about_me_video)

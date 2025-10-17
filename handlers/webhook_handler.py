@@ -8,7 +8,7 @@ from typing import Dict, Any
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-from database import get_db, Payment
+from database import get_db, PaymentRepository, UserRepository
 from data import get_course_by_slug, get_consultation_by_slug, get_guide_by_id, get_tariff_by_id
 from payments import YooKassaPayment
 from config import config
@@ -46,75 +46,72 @@ async def process_payment_webhook(
         logger.info(f"Processing webhook for payment {payment_id}, status: {payment_status}")
         
         # Находим платеж в нашей базе данных
-        db = get_db()
-        try:
-            payment = db.query(Payment).filter(Payment.payment_id == payment_id).first()
+        db = await get_db()
+        payment_repo = PaymentRepository(db)
+        
+        payment = await payment_repo.get_by_payment_id(payment_id)
+        
+        if not payment:
+            logger.warning(f"Payment {payment_id} not found in database")
+            return False
+        
+        # Обрабатываем успешный платеж
+        if payment_status == 'succeeded' and payment['status'] != 'succeeded':
+            await payment_repo.update_status(payment_id, 'succeeded')
             
-            if not payment:
-                logger.warning(f"Payment {payment_id} not found in database")
-                return False
+            logger.info(f"Payment {payment_id} marked as succeeded")
             
-            # Обрабатываем успешный платеж
-            if payment_status == 'succeeded' and payment.status != 'succeeded':
-                payment.status = 'succeeded'
-                payment.paid_at = datetime.utcnow()
-                db.commit()
-                
-                logger.info(f"Payment {payment_id} marked as succeeded")
-                
-                # Отправляем уведомление пользователю
-                await notify_user_payment_success(bot, payment, db)
-                
-                # Уведомляем админа
-                await notify_admin_new_payment(bot, payment, db)
-                
-                return True
+            # Отправляем уведомление пользователю
+            await notify_user_payment_success(bot, payment, db)
             
-            # Обрабатываем отмененный/неуспешный платеж
-            elif payment_status in ['canceled', 'failed']:
-                payment.status = payment_status
-                db.commit()
-                
-                logger.info(f"Payment {payment_id} marked as {payment_status}")
-                return True
+            # Уведомляем админа
+            await notify_admin_new_payment(bot, payment, db)
             
             return True
+        
+        # Обрабатываем отмененный/неуспешный платеж
+        elif payment_status in ['canceled', 'failed']:
+            await payment_repo.update_status(payment_id, payment_status)
             
-        finally:
-            db.close()
+            logger.info(f"Payment {payment_id} marked as {payment_status}")
+            return True
+        
+        return True
     
     except Exception as e:
         logger.error(f"Error processing webhook: {e}", exc_info=True)
         return False
 
 
-async def notify_user_payment_success(bot: Bot, payment: Payment, db):
+async def notify_user_payment_success(bot: Bot, payment: dict, db):
     """
     Отправка уведомления пользователю об успешной оплате
     
     Args:
         bot: Экземпляр бота
-        payment: Объект платежа из БД
-        db: Сессия базы данных
+        payment: Объект платежа из БД (dict)
+        db: База данных
     """
     try:
-        user = payment.user
+        # Получаем пользователя
+        user_repo = UserRepository(db)
+        user = await user_repo.get_by_id(payment['user_id'])
         
         if not user:
-            logger.warning(f"User not found for payment {payment.id}")
+            logger.warning(f"User not found for payment {payment['_id']}")
             return
         
         # Формируем сообщение в зависимости от типа продукта
-        if payment.product_type == 'course':
+        if payment['product_type'] == 'course':
             await notify_course_payment(bot, user, payment)
-        elif payment.product_type == 'consultation':
+        elif payment['product_type'] == 'consultation':
             await notify_consultation_payment(bot, user, payment)
-        elif payment.product_type == 'guide':
+        elif payment['product_type'] == 'guide':
             await notify_guide_payment(bot, user, payment)
         else:
             # Общее уведомление
             await bot.send_message(
-                chat_id=user.telegram_id,
+                chat_id=user['telegram_id'],
                 text="✅ <b>Оплата успешна!</b>\n\nСпасибо за покупку! 🌟"
             )
     
@@ -122,13 +119,13 @@ async def notify_user_payment_success(bot: Bot, payment: Payment, db):
         logger.error(f"Error notifying user about payment: {e}", exc_info=True)
 
 
-async def notify_course_payment(bot: Bot, user, payment: Payment):
+async def notify_course_payment(bot: Bot, user: dict, payment: dict):
     """Уведомление об оплате курса"""
-    course = get_course_by_slug(payment.course_slug)
-    tariff = get_tariff_by_id(payment.course_slug, payment.tariff_id) if course else None
+    course = get_course_by_slug(payment.get('course_slug'))
+    tariff = get_tariff_by_id(payment.get('course_slug'), payment.get('tariff_id')) if course else None
     
     if not course:
-        logger.warning(f"Course {payment.course_slug} not found")
+        logger.warning(f"Course {payment.get('course_slug')} not found")
         return
     
     text = "✅ <b>Оплата успешна!</b>\n\n"
@@ -145,18 +142,18 @@ async def notify_course_payment(bot: Bot, user, payment: Payment):
     ])
     
     await bot.send_message(
-        chat_id=user.telegram_id,
+        chat_id=user['telegram_id'],
         text=text,
         reply_markup=keyboard
     )
 
 
-async def notify_consultation_payment(bot: Bot, user, payment: Payment):
+async def notify_consultation_payment(bot: Bot, user: dict, payment: dict):
     """Уведомление об оплате консультации"""
-    consultation = get_consultation_by_slug(payment.consultation_slug)
+    consultation = get_consultation_by_slug(payment.get('consultation_slug'))
     
     if not consultation:
-        logger.warning(f"Consultation {payment.consultation_slug} not found")
+        logger.warning(f"Consultation {payment.get('consultation_slug')} not found")
         return
     
     text = "✅ <b>Оплата успешна!</b>\n\n"
@@ -169,20 +166,20 @@ async def notify_consultation_payment(bot: Bot, user, payment: Payment):
     ])
     
     await bot.send_message(
-        chat_id=user.telegram_id,
+        chat_id=user['telegram_id'],
         text=text,
         reply_markup=keyboard
     )
 
 
-async def notify_guide_payment(bot: Bot, user, payment: Payment):
+async def notify_guide_payment(bot: Bot, user: dict, payment: dict):
     """Уведомление об оплате гайда и отправка файла"""
-    guide = get_guide_by_id(payment.product_id)
+    guide = get_guide_by_id(payment.get('product_id'))
     
     if not guide:
-        logger.warning(f"Guide {payment.product_id} not found")
+        logger.warning(f"Guide {payment.get('product_id')} not found")
         await bot.send_message(
-            chat_id=user.telegram_id,
+            chat_id=user['telegram_id'],
             text="✅ <b>Оплата успешна!</b>\n\nГайд будет отправлен вам в течение нескольких минут."
         )
         return
@@ -192,7 +189,7 @@ async def notify_guide_payment(bot: Bot, user, payment: Payment):
     if file_id:
         # Отправляем файл
         await bot.send_document(
-            chat_id=user.telegram_id,
+            chat_id=user['telegram_id'],
             document=file_id,
             caption=f"✅ <b>Оплата успешна!</b>\n\n{guide.get('emoji', '💝')} Ваш {guide['name']} готов!\n\nЖелаем вам успехов в изучении! 🌟"
         )
@@ -214,83 +211,93 @@ async def notify_guide_payment(bot: Bot, user, payment: Payment):
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
         
         await bot.send_message(
-            chat_id=user.telegram_id,
+            chat_id=user['telegram_id'],
             text="Приятного изучения! 📖",
             reply_markup=keyboard
         )
     else:
         await bot.send_message(
-            chat_id=user.telegram_id,
+            chat_id=user['telegram_id'],
             text="✅ <b>Оплата успешна!</b>\n\nГайд будет отправлен вам в течение нескольких минут."
         )
 
 
-async def notify_admin_new_payment(bot: Bot, payment: Payment, db):
+async def notify_admin_new_payment(bot: Bot, payment: dict, db):
     """
     Уведомление админа о новом платеже
     
     Args:
         bot: Экземпляр бота
-        payment: Объект платежа
-        db: Сессия базы данных
+        payment: Объект платежа (dict)
+        db: База данных
     """
     try:
         if not config.ADMIN_ID:
             return
         
-        user = payment.user
+        # Получаем пользователя
+        user_repo = UserRepository(db)
+        user = await user_repo.get_by_id(payment['user_id'])
+        
+        if not user:
+            logger.warning(f"User not found for admin notification")
+            return
         
         text = "🔔 <b>Новый платеж!</b>\n\n"
         
         # Информация о пользователе
-        user_info = user.first_name or ""
-        if user.last_name:
-            user_info += f" {user.last_name}"
-        if user.username:
-            user_info += f" (@{user.username})"
+        user_info = user.get('first_name', '') or ""
+        if user.get('last_name'):
+            user_info += f" {user['last_name']}"
+        if user.get('username'):
+            user_info += f" (@{user['username']})"
         if not user_info.strip():
             user_info = "Не указано"
         
         text += f"👤 Пользователь: {user_info}\n"
-        text += f"🆔 Telegram ID: <code>{user.telegram_id}</code>\n"
-        text += f"💰 Сумма: {payment.amount:,.0f} ₽\n"
+        text += f"🆔 Telegram ID: <code>{user['telegram_id']}</code>\n"
+        text += f"💰 Сумма: {payment['amount']:,.0f} ₽\n"
         
         # Показываем, если оплата была по ссылке
-        if payment.is_payment_link:
+        if payment.get('is_payment_link'):
             text += f"🔗 <b>Оплата по сгенерированной ссылке</b>\n"
         
-        text += f"📦 Тип: {payment.product_type}\n"
+        text += f"📦 Тип: {payment['product_type']}\n"
         
-        if payment.product_type == 'course':
-            course = get_course_by_slug(payment.course_slug)
+        if payment['product_type'] == 'course':
+            course = get_course_by_slug(payment.get('course_slug'))
             if course:
                 text += f"📚 Курс: {course['name']}\n"
-                tariff = get_tariff_by_id(payment.course_slug, payment.tariff_id) if payment.tariff_id else None
+                tariff = get_tariff_by_id(payment.get('course_slug'), payment.get('tariff_id')) if payment.get('tariff_id') else None
                 if tariff:
                     text += f"   Тариф: {tariff.get('name', 'Не указан')}\n"
-        elif payment.product_type == 'consultation':
-            consultation = get_consultation_by_slug(payment.consultation_slug)
+        elif payment['product_type'] == 'consultation':
+            consultation = get_consultation_by_slug(payment.get('consultation_slug'))
             if consultation:
                 text += f"🔮 Консультация: {consultation['name']}\n"
                 # Ищем опцию консультации
-                if payment.consultation_option_id:
+                if payment.get('consultation_option_id'):
                     options = consultation.get('options', [])
-                    option = next((opt for opt in options if opt.get('id') == payment.consultation_option_id), None)
+                    option = next((opt for opt in options if opt.get('id') == payment['consultation_option_id']), None)
                     if option:
                         text += f"   Опция: {option.get('name', 'Не указана')}\n"
-        elif payment.product_type == 'guide':
-            guide = get_guide_by_id(payment.product_id)
+        elif payment['product_type'] == 'guide':
+            guide = get_guide_by_id(payment.get('product_id'))
             if guide:
                 text += f"📖 Гайд: {guide['name']}\n"
         
-        text += f"\n🆔 ID платежа: <code>{payment.payment_id}</code>"
-        text += f"\n📅 Дата: {payment.paid_at.strftime('%d.%m.%Y %H:%M') if payment.paid_at else 'Только что'}"
+        text += f"\n🆔 ID платежа: <code>{payment.get('payment_id')}</code>"
+        paid_at = payment.get('paid_at')
+        if paid_at:
+            text += f"\n📅 Дата: {paid_at.strftime('%d.%m.%Y %H:%M')}"
+        else:
+            text += f"\n📅 Дата: Только что"
         
         # Добавляем кнопку для быстрого доступа к чату с пользователем (если есть username)
         keyboard = None
-        if user.username:
+        if user.get('username'):
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="💬 Написать пользователю", url=f"https://t.me/{user.username}")]
+                [InlineKeyboardButton(text="💬 Написать пользователю", url=f"https://t.me/{user['username']}")]
             ])
         
         await bot.send_message(

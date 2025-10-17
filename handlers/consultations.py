@@ -1,9 +1,8 @@
-from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from aiogram.exceptions import TelegramBadRequest
 
-from database import get_db, User
+from database import get_db, UserRepository
 from data import get_active_consultations, get_consultation_by_slug, get_consultation_option
 from keyboards import (
     get_consultations_keyboard,
@@ -18,60 +17,54 @@ router = Router()
 @router.callback_query(F.data == "consultations")
 async def show_consultations_catalog(callback: CallbackQuery):
     """Показать каталог консультаций"""
-    db = get_db()
+    db = await get_db()
+    user_repo = UserRepository(db)
+    
+    # Обновляем активность
+    await user_repo.update_activity(callback.from_user.id)
+    
+    # Получаем активные консультации из JSON
+    consultations = get_active_consultations()
+    
+    if not consultations:
+        text = "🔮 К сожалению, сейчас нет доступных консультаций."
+        markup = get_back_keyboard("main_menu")
+    else:
+        text = "🔮 **Консультационные услуги**\n\n"
+        text += "Выберите интересующую вас услугу для получения подробной информации:"
+        markup = get_consultations_keyboard(consultations)
     
     try:
-        # Обновляем активность
-        user = db.query(User).filter(User.telegram_id == callback.from_user.id).first()
-        if user:
-            user.last_activity = datetime.utcnow()
-            db.commit()
-        
-        # Получаем активные консультации из JSON
-        consultations = get_active_consultations()
-        
-        if not consultations:
-            text = "🔮 К сожалению, сейчас нет доступных консультаций."
-            markup = get_back_keyboard("main_menu")
-        else:
-            text = "🔮 **Консультационные услуги**\n\n"
-            text += "Выберите интересующую вас услугу для получения подробной информации:"
-            markup = get_consultations_keyboard(consultations)
-        
-        try:
-            await callback.message.edit_text(
-                text,
+        await callback.message.edit_text(
+            text,
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+    except Exception:
+        # Если не можем отредактировать
+        if callback.message.video:
+            # Если видео - НЕ удаляем
+            await callback.bot.send_message(
+                chat_id=callback.message.chat.id,
+                text=text,
                 reply_markup=markup,
                 parse_mode="Markdown"
             )
-        except Exception:
-            # Если не можем отредактировать
-            if callback.message.video:
-                # Если видео - НЕ удаляем
-                await callback.bot.send_message(
-                    chat_id=callback.message.chat.id,
-                    text=text,
-                    reply_markup=markup,
-                    parse_mode="Markdown"
-                )
-            else:
-                # Если фото - удаляем и отправляем новое
-                try:
-                    await callback.message.delete()
-                except Exception:
-                    pass
-                
-                await callback.bot.send_message(
-                    chat_id=callback.message.chat.id,
-                    text=text,
-                    reply_markup=markup,
-                    parse_mode="Markdown"
-                )
-        
-        await callback.answer()
+        else:
+            # Если фото - удаляем и отправляем новое
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+            
+            await callback.bot.send_message(
+                chat_id=callback.message.chat.id,
+                text=text,
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
     
-    finally:
-        db.close()
+    await callback.answer()
 
 
 # Этот обработчик больше не нужен - запись идет через Telegram

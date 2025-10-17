@@ -2,8 +2,9 @@ import logging
 from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from bson import ObjectId
 
-from database import get_db, User, Payment
+from database import get_db, User, Payment, UserRepository, PaymentRepository
 from data import get_course_by_slug, get_tariff_by_id, get_consultation_by_slug, get_consultation_option, get_guide_by_id
 from keyboards import get_payment_keyboard, get_back_keyboard
 from payments import YooKassaPayment
@@ -28,7 +29,9 @@ async def process_tariff_selection(callback: CallbackQuery):
     course_slug = parts[1]
     tariff_id = parts[2]
     
-    db = get_db()
+    db = await get_db()
+    user_repo = UserRepository(db)
+    payment_repo = PaymentRepository(db)
     
     try:
         # Получаем курс и тариф из JSON
@@ -44,13 +47,13 @@ async def process_tariff_selection(callback: CallbackQuery):
             await callback.answer("Тариф не найден", show_alert=True)
             return
         
-        user = db.query(User).filter(User.telegram_id == callback.from_user.id).first()
+        user = await user_repo.get_by_telegram_id(callback.from_user.id)
         if not user:
             logger.error(f"User not found in database: {callback.from_user.id}")
             await callback.answer("Ошибка при создании платежа", show_alert=True)
             return
         
-        # Создаем платеж в базе (теперь с slug вместо FK)
+        # Создаем платеж в базе
         payment = Payment(
             user_id=user.id,
             course_slug=course_slug,
@@ -59,9 +62,7 @@ async def process_tariff_selection(callback: CallbackQuery):
             status='pending',
             product_type='course'
         )
-        db.add(payment)
-        db.commit()
-        db.refresh(payment)
+        payment = await payment_repo.create(payment)
         
         logger.info(f"Payment created in DB: {payment.id} for user {user.id}")
         
@@ -79,8 +80,7 @@ async def process_tariff_selection(callback: CallbackQuery):
         )
         
         if not payment_result:
-            payment.status = 'failed'
-            db.commit()
+            await payment_repo.update(payment.id, {"status": "failed"})
             logger.error(f"Failed to create payment in YooKassa for payment {payment.id}")
             await callback.message.edit_text(
                 "❌ Ошибка при создании платежа. Попробуйте позже.",
@@ -90,9 +90,10 @@ async def process_tariff_selection(callback: CallbackQuery):
             return
         
         # Обновляем платеж данными из ЮKassa
-        payment.payment_id = payment_result['id']
-        payment.confirmation_url = payment_result['confirmation_url']
-        db.commit()
+        await payment_repo.update(payment.id, {
+            "payment_id": payment_result['id'],
+            "confirmation_url": payment_result['confirmation_url']
+        })
         
         # Формируем сообщение об оплате
         support_text = "✅ С сопровождением куратора" if tariff.get('with_support') else "📚 Самостоятельное обучение"
@@ -107,7 +108,7 @@ async def process_tariff_selection(callback: CallbackQuery):
         
         await callback.message.edit_text(
             text,
-            reply_markup=get_payment_keyboard(payment_result['confirmation_url'], payment.id),
+            reply_markup=get_payment_keyboard(payment_result['confirmation_url'], str(payment.id)),
             parse_mode="Markdown"
         )
         await callback.answer()
@@ -115,30 +116,27 @@ async def process_tariff_selection(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Error in process_tariff_selection: {e}", exc_info=True)
         await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
-    
-    finally:
-        db.close()
-
-
-# Этот обработчик больше не используется - консультации теперь записываются через Telegram
-# Платежную ссылку генерирует админ через админ-панель
-# @router.callback_query(F.data.startswith("consultation_option_"))
-# async def process_consultation_option_selection(callback: CallbackQuery):
-#     """Обработка выбора варианта консультации и создание платежа"""
 
 
 @router.callback_query(F.data.startswith("check_payment_"))
 async def check_payment_status(callback: CallbackQuery):
     """Проверка статуса платежа"""
-    payment_id = int(callback.data.replace("check_payment_", ""))
+    payment_id_str = callback.data.replace("check_payment_", "")
+    
+    try:
+        payment_id = ObjectId(payment_id_str)
+    except Exception:
+        await callback.answer("Неверный ID платежа", show_alert=True)
+        return
     
     logger.info(f"User {callback.from_user.id} checking payment status: {payment_id}")
     
-    db = get_db()
+    db = await get_db()
+    payment_repo = PaymentRepository(db)
     
     try:
         # Получаем платеж из базы
-        payment = db.query(Payment).filter(Payment.id == payment_id).first()
+        payment = await payment_repo.get_by_id(payment_id)
         
         if not payment:
             logger.warning(f"Payment {payment_id} not found in database")
@@ -157,9 +155,10 @@ async def check_payment_status(callback: CallbackQuery):
             
             if payment_status and payment_status['status'] == 'succeeded':
                 # Обновляем платеж
-                payment.status = 'succeeded'
-                payment.paid_at = datetime.utcnow()
-                db.commit()
+                await payment_repo.update(payment.id, {
+                    "status": "succeeded",
+                    "paid_at": datetime.utcnow()
+                })
                 
                 logger.info(f"Payment {payment_id} status updated to succeeded")
                 
@@ -215,9 +214,6 @@ async def check_payment_status(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Error in check_payment_status: {e}", exc_info=True)
         await callback.answer("Произошла ошибка при проверке платежа", show_alert=True)
-    
-    finally:
-        db.close()
 
 
 async def send_guide_to_user(callback: CallbackQuery, payment: Payment):

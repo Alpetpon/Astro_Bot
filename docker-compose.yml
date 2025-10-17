@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: astro_bot_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin_password_change_me
+      MONGO_INITDB_DATABASE: astro_bot
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - astro_network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # MongoDB Express - веб-интерфейс для управления БД (опционально)
+  mongo-express:
+    image: mongo-express:latest
+    container_name: astro_bot_mongo_express
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: admin_password_change_me
+      ME_CONFIG_MONGODB_URL: mongodb://admin:admin_password_change_me@mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin
+    depends_on:
+      - mongodb
+    networks:
+      - astro_network
+
+  # Бот (раскомментируйте когда будете готовы запустить бота в Docker)
+  # bot:
+  #   build: .
+  #   container_name: astro_bot
+  #   restart: unless-stopped
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     MONGODB_URL: mongodb://admin:admin_password_change_me@mongodb:27017/astro_bot?authSource=admin
+  #     MONGODB_DB_NAME: astro_bot
+  #   depends_on:
+  #     mongodb:
+  #       condition: service_healthy
+  #   networks:
+  #     - astro_network
+  #   volumes:
+  #     - ./data:/app/data
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+
+networks:
+  astro_network:
+    driver: bridge
+

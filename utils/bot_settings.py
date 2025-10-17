@@ -1,10 +1,9 @@
 """Helper функции для работы с настройками бота"""
 from typing import Optional
-from sqlalchemy.orm import Session
-from database import BotSettings, get_db
+from database import get_db, BotSettingsRepository
 
 
-def get_setting(key: str, default: Optional[str] = None) -> Optional[str]:
+async def get_setting(key: str, default: Optional[str] = None) -> Optional[str]:
     """
     Получить значение настройки из базы данных
     
@@ -15,17 +14,15 @@ def get_setting(key: str, default: Optional[str] = None) -> Optional[str]:
     Returns:
         Значение настройки или default
     """
-    db: Session = get_db()
-    try:
-        setting = db.query(BotSettings).filter(BotSettings.setting_key == key).first()
-        if setting:
-            return setting.setting_value
-        return default
-    finally:
-        db.close()
+    db = await get_db()
+    settings_repo = BotSettingsRepository(db)
+    setting = await settings_repo.get(key)
+    if setting:
+        return setting.setting_value
+    return default
 
 
-def set_setting(key: str, value: Optional[str]) -> bool:
+async def set_setting(key: str, value: Optional[str]) -> bool:
     """
     Установить значение настройки в базе данных
     
@@ -36,32 +33,17 @@ def set_setting(key: str, value: Optional[str]) -> bool:
     Returns:
         True если успешно, False если ошибка
     """
-    db: Session = get_db()
     try:
-        setting = db.query(BotSettings).filter(BotSettings.setting_key == key).first()
-        
-        if setting:
-            # Обновляем существующую настройку
-            setting.setting_value = value
-        else:
-            # Создаем новую настройку
-            setting = BotSettings(
-                setting_key=key,
-                setting_value=value
-            )
-            db.add(setting)
-        
-        db.commit()
+        db = await get_db()
+        settings_repo = BotSettingsRepository(db)
+        await settings_repo.set(key, value)
         return True
     except Exception as e:
-        db.rollback()
         print(f"Error setting {key}: {e}")
         return False
-    finally:
-        db.close()
 
 
-def delete_setting(key: str) -> bool:
+async def delete_setting(key: str) -> bool:
     """
     Удалить настройку из базы данных
     
@@ -71,21 +53,14 @@ def delete_setting(key: str) -> bool:
     Returns:
         True если успешно, False если ошибка
     """
-    db: Session = get_db()
     try:
-        setting = db.query(BotSettings).filter(BotSettings.setting_key == key).first()
-        
-        if setting:
-            db.delete(setting)
-            db.commit()
-            return True
-        return False
+        db = await get_db()
+        settings_repo = BotSettingsRepository(db)
+        await settings_repo.delete(key)
+        return True
     except Exception as e:
-        db.rollback()
         print(f"Error deleting {key}: {e}")
         return False
-    finally:
-        db.close()
 
 
 # Константы для ключей настроек

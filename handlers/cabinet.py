@@ -1,9 +1,9 @@
 import logging
-from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from bson import ObjectId
 
-from database import get_db, User, Payment
+from database import get_db, UserRepository, PaymentRepository
 from keyboards import get_back_keyboard
 from data import (
     get_course_by_slug, 
@@ -20,20 +20,20 @@ router = Router()
 @router.callback_query(F.data == "my_cabinet")
 async def show_my_cabinet(callback: CallbackQuery):
     """Показать личный кабинет"""
-    db = get_db()
+    db = await get_db()
+    user_repo = UserRepository(db)
+    payment_repo = PaymentRepository(db)
     
     try:
         # Обновляем активность
-        user = db.query(User).filter(User.telegram_id == callback.from_user.id).first()
+        user = await user_repo.get_by_telegram_id(callback.from_user.id)
         if user:
-            user.last_activity = datetime.utcnow()
-            db.commit()
+            await user_repo.update_activity(callback.from_user.id)
         
         # Проверяем платежи
-        payments = db.query(Payment).filter(
-            Payment.user_id == user.id,
-            Payment.status == 'succeeded'
-        ).all()
+        payments = await payment_repo.get_user_payments(user.id)
+        # Фильтруем только успешные платежи
+        payments = [p for p in payments if p.status == 'succeeded']
         
         # Считаем статистику
         courses_count = len([p for p in payments if p.product_type == 'course'])
@@ -108,12 +108,7 @@ async def show_my_cabinet(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Error in show_my_cabinet: {e}", exc_info=True)
         await callback.answer("Произошла ошибка", show_alert=True)
-    
-    finally:
-        db.close()
 
-
-# Заглушки для других обработчиков кабинета (на будущее)
 
 @router.callback_query(F.data == "my_courses")
 async def show_my_courses(callback: CallbackQuery):
@@ -132,23 +127,21 @@ async def show_my_course(callback: CallbackQuery):
     """Показать купленный курс с материалами"""
     course_slug = callback.data.replace("my_course_", "")
     
-    db = get_db()
+    db = await get_db()
+    user_repo = UserRepository(db)
+    payment_repo = PaymentRepository(db)
     
     try:
         # Проверяем, что пользователь купил этот курс
-        user = db.query(User).filter(User.telegram_id == callback.from_user.id).first()
+        user = await user_repo.get_by_telegram_id(callback.from_user.id)
         
         if not user:
             await callback.answer("Ошибка: пользователь не найден", show_alert=True)
             return
         
         # Проверяем наличие успешного платежа за курс
-        payment = db.query(Payment).filter(
-            Payment.user_id == user.id,
-            Payment.course_slug == course_slug,
-            Payment.status == 'succeeded',
-            Payment.product_type == 'course'
-        ).first()
+        payments = await payment_repo.get_user_payments(user.id)
+        payment = next((p for p in payments if p.course_slug == course_slug and p.status == 'succeeded' and p.product_type == 'course'), None)
         
         if not payment:
             await callback.answer("У вас нет доступа к этому курсу", show_alert=True)
@@ -238,9 +231,6 @@ async def show_my_course(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Error in show_my_course: {e}", exc_info=True)
         await callback.answer("Произошла ошибка при загрузке курса", show_alert=True)
-    
-    finally:
-        db.close()
 
 
 @router.callback_query(F.data.startswith("module_"))
@@ -255,22 +245,20 @@ async def show_module(callback: CallbackQuery):
     course_slug = parts[1]
     module_id = parts[2]
     
-    db = get_db()
+    db = await get_db()
+    user_repo = UserRepository(db)
+    payment_repo = PaymentRepository(db)
     
     try:
         # Проверяем доступ к курсу
-        user = db.query(User).filter(User.telegram_id == callback.from_user.id).first()
+        user = await user_repo.get_by_telegram_id(callback.from_user.id)
         
         if not user:
             await callback.answer("Ошибка: пользователь не найден", show_alert=True)
             return
         
-        payment = db.query(Payment).filter(
-            Payment.user_id == user.id,
-            Payment.course_slug == course_slug,
-            Payment.status == 'succeeded',
-            Payment.product_type == 'course'
-        ).first()
+        payments = await payment_repo.get_user_payments(user.id)
+        payment = next((p for p in payments if p.course_slug == course_slug and p.status == 'succeeded' and p.product_type == 'course'), None)
         
         if not payment:
             await callback.answer("У вас нет доступа к этому курсу", show_alert=True)
@@ -350,9 +338,6 @@ async def show_module(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Error in show_module: {e}", exc_info=True)
         await callback.answer("Произошла ошибка при загрузке модуля", show_alert=True)
-    
-    finally:
-        db.close()
 
 
 @router.callback_query(F.data.startswith("lesson_"))
@@ -368,22 +353,20 @@ async def show_lesson(callback: CallbackQuery):
     module_id = parts[2]
     lesson_id = parts[3]
     
-    db = get_db()
+    db = await get_db()
+    user_repo = UserRepository(db)
+    payment_repo = PaymentRepository(db)
     
     try:
         # Проверяем доступ к курсу
-        user = db.query(User).filter(User.telegram_id == callback.from_user.id).first()
+        user = await user_repo.get_by_telegram_id(callback.from_user.id)
         
         if not user:
             await callback.answer("Ошибка: пользователь не найден", show_alert=True)
             return
         
-        payment = db.query(Payment).filter(
-            Payment.user_id == user.id,
-            Payment.course_slug == course_slug,
-            Payment.status == 'succeeded',
-            Payment.product_type == 'course'
-        ).first()
+        payments = await payment_repo.get_user_payments(user.id)
+        payment = next((p for p in payments if p.course_slug == course_slug and p.status == 'succeeded' and p.product_type == 'course'), None)
         
         if not payment:
             await callback.answer("У вас нет доступа к этому курсу", show_alert=True)
@@ -484,6 +467,3 @@ async def show_lesson(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Error in show_lesson: {e}", exc_info=True)
         await callback.answer("Произошла ошибка при загрузке урока", show_alert=True)
-    
-    finally:
-        db.close()

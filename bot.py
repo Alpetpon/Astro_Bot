@@ -5,7 +5,7 @@ from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
 from config import config
-from database import init_db
+from database import mongodb
 from handlers import (
     start_router,
     menu_router,
@@ -19,7 +19,6 @@ from handlers import (
     admin_reviews_router,
     admin_video_router
 )
-from scheduler import setup_scheduler
 
 
 # Настройка логирования
@@ -32,9 +31,9 @@ logger = logging.getLogger(__name__)
 
 async def main():
     """Главная функция запуска бота"""
-    # Инициализация базы данных
-    logger.info(f"Initializing database at: {config.DATABASE_URL}")
-    init_db()
+    # Инициализация MongoDB
+    logger.info(f"Connecting to MongoDB: {config.MONGODB_URL}")
+    await mongodb.connect(config.MONGODB_URL, config.MONGODB_DB_NAME)
     
     # Логируем состояние данных
     from data import get_all_courses, get_all_consultations, get_all_guides
@@ -66,17 +65,12 @@ async def main():
     dp.include_router(payments_router)
     dp.include_router(cabinet_router)
     
-    # Настройка планировщика
-    logger.info("Setting up scheduler...")
-    scheduler = setup_scheduler(bot)
-    scheduler.start()
-    
     # Запуск бота
     logger.info("Bot started successfully!")
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
-        scheduler.shutdown()
+        await mongodb.close()
         await bot.session.close()
 
 

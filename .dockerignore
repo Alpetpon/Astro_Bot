@@ -7,12 +7,10 @@ __pycache__/
 venv/
 env/
 ENV/
-.venv/
 
-# База данных (локальная)
+# Database
 *.db
-*.sqlite
-*.sqlite3
+*.db-journal
 
 # IDE
 .vscode/
@@ -21,22 +19,26 @@ ENV/
 *.swo
 *~
 
+# OS
+.DS_Store
+Thumbs.db
+
 # Git
 .git/
 .gitignore
 
-# Env файлы
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation
+*.md
+!README.md
+
+# Env files (будем монтировать отдельно)
 .env
+.env.example
 
-# Документация
-README.md
-
-# Скрипты для локальной разработки
-run.sh
-check_config.py
-setup_courses.py
-
-# Тесты
-tests/
-*.test.py
-
+# Logs
+*.log

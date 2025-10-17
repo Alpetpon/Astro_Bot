@@ -1,10 +1,8 @@
-from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from sqlalchemy.orm import Session
 
 from config import config
-from database import get_db, User
+from database import get_db, UserRepository
 from data import get_active_guides, get_guide_by_id
 from keyboards import get_main_menu_keyboard, get_back_keyboard, get_guides_list_keyboard, get_guide_keyboard, get_about_me_keyboard
 from utils.bot_settings import get_setting, ABOUT_ME_VIDEO_KEY
@@ -15,49 +13,43 @@ router = Router()
 @router.callback_query(F.data == "main_menu")
 async def show_main_menu(callback: CallbackQuery):
     """Показать главное меню"""
-    db: Session = get_db()
+    db = await get_db()
+    user_repo = UserRepository(db)
+    
+    # Обновляем активность пользователя
+    await user_repo.update_activity(callback.from_user.id)
     
     try:
-        # Обновляем активность пользователя
-        user = db.query(User).filter(User.telegram_id == callback.from_user.id).first()
-        if user:
-            user.last_activity = datetime.utcnow()
-            db.commit()
-        
-        try:
-            await callback.message.edit_text(
-                "🏠 **Главное меню**\n\nВыберите интересующий раздел:",
+        await callback.message.edit_text(
+            "🏠 **Главное меню**\n\nВыберите интересующий раздел:",
+            reply_markup=get_main_menu_keyboard(),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        # Если не можем отредактировать
+        # Проверяем, это видео (приветствие) или фото (отзывы)
+        if callback.message.video:
+            # Если это приветственное видео - НЕ удаляем, просто отправляем новое меню
+            await callback.bot.send_message(
+                chat_id=callback.message.chat.id,
+                text="🏠 **Главное меню**\n\nВыберите интересующий раздел:",
                 reply_markup=get_main_menu_keyboard(),
                 parse_mode="Markdown"
             )
-        except Exception:
-            # Если не можем отредактировать
-            # Проверяем, это видео (приветствие) или фото (отзывы)
-            if callback.message.video:
-                # Если это приветственное видео - НЕ удаляем, просто отправляем новое меню
-                await callback.bot.send_message(
-                    chat_id=callback.message.chat.id,
-                    text="🏠 **Главное меню**\n\nВыберите интересующий раздел:",
-                    reply_markup=get_main_menu_keyboard(),
-                    parse_mode="Markdown"
-                )
-            else:
-                # Если это фото или другое сообщение - удаляем и отправляем новое
-                try:
-                    await callback.message.delete()
-                except Exception:
-                    pass
-                
-                await callback.bot.send_message(
-                    chat_id=callback.message.chat.id,
-                    text="🏠 **Главное меню**\n\nВыберите интересующий раздел:",
-                    reply_markup=get_main_menu_keyboard(),
-                    parse_mode="Markdown"
-                )
-        await callback.answer()
-    
-    finally:
-        db.close()
+        else:
+            # Если это фото или другое сообщение - удаляем и отправляем новое
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+            
+            await callback.bot.send_message(
+                chat_id=callback.message.chat.id,
+                text="🏠 **Главное меню**\n\nВыберите интересующий раздел:",
+                reply_markup=get_main_menu_keyboard(),
+                parse_mode="Markdown"
+            )
+    await callback.answer()
 
 
 @router.callback_query(F.data == "about_me")
@@ -65,7 +57,7 @@ async def show_about_me(callback: CallbackQuery):
     """Показать информацию о преподавателе с видео-интервью и кнопками соц. сетей"""
     
     # Получаем file_id видео (сначала из БД, потом из config)
-    about_me_video_id = get_setting(ABOUT_ME_VIDEO_KEY) or config.ABOUT_ME_VIDEO_FILE_ID
+    about_me_video_id = await get_setting(ABOUT_ME_VIDEO_KEY) or config.ABOUT_ME_VIDEO_FILE_ID
     
     # Отправляем видео-интервью, если оно настроено
     if about_me_video_id:

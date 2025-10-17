@@ -4,15 +4,14 @@ from aiogram.filters import Command, StateFilter
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from bson import ObjectId
 import os
 from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
 from config import config
-from database import get_db, User, Payment
+from database import get_db, User, Payment, UserRepository, PaymentRepository
 from keyboards import get_admin_keyboard, get_bot_management_keyboard, get_back_to_admin_keyboard
 from data import get_all_courses, get_all_consultations
 from utils.bot_settings import is_admin
@@ -127,35 +126,34 @@ async def show_stats(callback: CallbackQuery):
         await callback.answer("❌ Доступ запрещен", show_alert=True)
         return
     
-    db: Session = get_db()
+    db = await get_db()
+    user_repo = UserRepository(db)
+    payment_repo = PaymentRepository(db)
     
-    try:
-        # Общая статистика
-        total_users = db.query(User).count()
-        total_purchases = db.query(Payment).count()
-        total_revenue = db.query(func.sum(Payment.amount)).scalar() or 0
-        
-        # Активные пользователи (за последние 7 дней)
-        week_ago = datetime.utcnow() - timedelta(days=7)
-        active_users = db.query(User).filter(User.last_activity >= week_ago).count()
-        
-        # Новые пользователи за неделю
-        new_users = db.query(User).filter(User.created_at >= week_ago).count()
-        
-        # Покупки за неделю
-        week_purchases = db.query(Payment).filter(Payment.created_at >= week_ago).count()
-        week_revenue = db.query(func.sum(Payment.amount)).filter(
-            Payment.created_at >= week_ago
-        ).scalar() or 0
-        
-        # Курсы, консультации и гайды (из JSON)
-        total_courses = len(get_all_courses())
-        total_consultations = len(get_all_consultations())
-        
-        from data import get_all_guides
-        total_guides = len(get_all_guides())
-        
-        stats_text = f"""📊 <b>Статистика</b>
+    # Общая статистика
+    total_users = await user_repo.count()
+    total_purchases = await payment_repo.count_by_status("succeeded")
+    total_revenue = await payment_repo.sum_by_status("succeeded")
+    
+    # Активные пользователи (за последние 7 дней)
+    week_ago = datetime.utcnow() - timedelta(days=7)
+    active_users = await user_repo.count_active_since(week_ago)
+    
+    # Новые пользователи за неделю
+    new_users = await user_repo.count_created_since(week_ago)
+    
+    # Покупки за неделю
+    week_purchases = await payment_repo.count_since(week_ago, "succeeded")
+    week_revenue = await payment_repo.sum_since(week_ago, "succeeded")
+    
+    # Курсы, консультации и гайды (из JSON)
+    total_courses = len(get_all_courses())
+    total_consultations = len(get_all_consultations())
+    
+    from data import get_all_guides
+    total_guides = len(get_all_guides())
+    
+    stats_text = f"""📊 <b>Статистика</b>
 
 👥 <b>Пользователи:</b>
 • Всего: {total_users}
@@ -173,21 +171,18 @@ async def show_stats(callback: CallbackQuery):
 • Консультаций: {total_consultations}
 • Гайдов: {total_guides}
 """
-        
-        # Кнопки с возможностью скачать Excel
-        buttons = [
-            [InlineKeyboardButton(text="📥 Скачать детальную аналитику (Excel)", callback_data="download_analytics")],
-            [InlineKeyboardButton(text="◀️ Назад в админ-панель", callback_data="admin_panel")]
-        ]
-        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-        
-        await callback.message.edit_text(
-            stats_text,
-            reply_markup=keyboard
-        )
     
-    finally:
-        db.close()
+    # Кнопки с возможностью скачать Excel
+    buttons = [
+        [InlineKeyboardButton(text="📥 Скачать детальную аналитику (Excel)", callback_data="download_analytics")],
+        [InlineKeyboardButton(text="◀️ Назад в админ-панель", callback_data="admin_panel")]
+    ]
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+    await callback.message.edit_text(
+        stats_text,
+        reply_markup=keyboard
+    )
     
     await callback.answer()
 
@@ -228,35 +223,32 @@ async def broadcast_message(message: Message):
         )
         return
     
-    db: Session = get_db()
+    db = await get_db()
+    user_repo = UserRepository(db)
     
-    try:
-        # Получаем всех пользователей
-        users = db.query(User).all()
-        
-        success_count = 0
-        fail_count = 0
-        
-        status_msg = await message.answer(f"📤 Начинаю рассылку для {len(users)} пользователей...")
-        
-        for user in users:
-            try:
-                await message.bot.send_message(
-                    chat_id=user.telegram_id,
-                    text=text
-                )
-                success_count += 1
-            except Exception as e:
-                fail_count += 1
-        
-        await status_msg.edit_text(
-            f"✅ Рассылка завершена!\n\n"
-            f"Успешно: {success_count}\n"
-            f"Ошибок: {fail_count}"
-        )
+    # Получаем всех пользователей
+    users = await user_repo.get_all()
     
-    finally:
-        db.close()
+    success_count = 0
+    fail_count = 0
+    
+    status_msg = await message.answer(f"📤 Начинаю рассылку для {len(users)} пользователей...")
+    
+    for user in users:
+        try:
+            await message.bot.send_message(
+                chat_id=user.telegram_id,
+                text=text
+            )
+            success_count += 1
+        except Exception:
+            fail_count += 1
+    
+    await status_msg.edit_text(
+        f"✅ Рассылка завершена!\n\n"
+        f"Успешно: {success_count}\n"
+        f"Ошибок: {fail_count}"
+    )
 
 
 # ===== Универсальный обработчик рассылки =====
@@ -340,66 +332,63 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext)
     data = await state.get_data()
     media_type = data.get("media_type")
     
-    db: Session = get_db()
+    db = await get_db()
+    user_repo = UserRepository(db)
     
+    users = await user_repo.get_all()
+    
+    success_count = 0
+    fail_count = 0
+    
+    # Удаляем превью и отправляем новое сообщение о начале рассылки
     try:
-        users = db.query(User).all()
-        
-        success_count = 0
-        fail_count = 0
-        
-        # Удаляем превью и отправляем новое сообщение о начале рассылки
-        try:
-            await callback.message.delete()
-        except:
-            pass
-        
-        status_msg = await callback.bot.send_message(
-            chat_id=callback.from_user.id,
-            text=f"📤 Начинаю рассылку для {len(users)} пользователей..."
-        )
-        
-        for user in users:
-            try:
-                if media_type == "text":
-                    await callback.bot.send_message(
-                        chat_id=user.telegram_id,
-                        text=data["text"]
-                    )
-                elif media_type == "photo":
-                    await callback.bot.send_photo(
-                        chat_id=user.telegram_id,
-                        photo=data["photo_id"],
-                        caption=data.get("caption")
-                    )
-                elif media_type == "video":
-                    await callback.bot.send_video(
-                        chat_id=user.telegram_id,
-                        video=data["video_id"],
-                        caption=data.get("caption")
-                    )
-                
-                success_count += 1
-            except Exception as e:
-                fail_count += 1
-        
-        await status_msg.edit_text(
-            f"✅ Рассылка завершена!\n\n"
-            f"Успешно: {success_count}\n"
-            f"Ошибок: {fail_count}"
-        )
-        
-        await callback.bot.send_message(
-            chat_id=callback.from_user.id,
-            text="Выберите действие:",
-            reply_markup=get_admin_keyboard()
-        )
-        
-        await state.clear()
-        await callback.answer()
+        await callback.message.delete()
+    except:
+        pass
     
-    finally:
-        db.close()
+    status_msg = await callback.bot.send_message(
+        chat_id=callback.from_user.id,
+        text=f"📤 Начинаю рассылку для {len(users)} пользователей..."
+    )
+    
+    for user in users:
+        try:
+            if media_type == "text":
+                await callback.bot.send_message(
+                    chat_id=user.telegram_id,
+                    text=data["text"]
+                )
+            elif media_type == "photo":
+                await callback.bot.send_photo(
+                    chat_id=user.telegram_id,
+                    photo=data["photo_id"],
+                    caption=data.get("caption")
+                )
+            elif media_type == "video":
+                await callback.bot.send_video(
+                    chat_id=user.telegram_id,
+                    video=data["video_id"],
+                    caption=data.get("caption")
+                )
+            
+            success_count += 1
+        except Exception:
+            fail_count += 1
+    
+    await status_msg.edit_text(
+        f"✅ Рассылка завершена!\n\n"
+        f"Успешно: {success_count}\n"
+        f"Ошибок: {fail_count}"
+    )
+    
+    await callback.bot.send_message(
+        chat_id=callback.from_user.id,
+        text="Выберите действие:",
+        reply_markup=get_admin_keyboard()
+    )
+    
+    await state.clear()
+    await callback.answer()
 
 
 @router.callback_query(F.data == "admin_courses")
@@ -1811,68 +1800,65 @@ async def process_user_id(message: Message, state: FSMContext):
         return
     
     user_input = message.text.strip()
-    db = get_db()
+    db = await get_db()
+    user_repo = UserRepository(db)
     
-    try:
-        # Проверяем, это ID или username
-        if user_input.startswith('@'):
-            username = user_input[1:]  # Убираем @
-            user = db.query(User).filter(User.username == username).first()
-        else:
-            try:
-                telegram_id = int(user_input)
-                user = db.query(User).filter(User.telegram_id == telegram_id).first()
-            except ValueError:
-                await message.answer("❌ Неверный формат. Введите числовой ID или username с @")
-                return
-        
-        if not user:
-            await message.answer(
-                "❌ Пользователь не найден в базе.\n\n"
-                "Убедитесь, что пользователь хотя бы раз запускал бота."
-            )
+    # Проверяем, это ID или username
+    if user_input.startswith('@'):
+        username = user_input[1:]  # Убираем @
+        user = await user_repo.get_by_username(username)
+    else:
+        try:
+            telegram_id = int(user_input)
+            user = await user_repo.get_by_telegram_id(telegram_id)
+        except ValueError:
+            await message.answer("❌ Неверный формат. Введите числовой ID или username с @")
             return
-        
-        # Сохраняем данные пользователя
-        await state.update_data(
-            user_id=user.id,
-            telegram_id=user.telegram_id,
-            user_name=user.first_name or user.username or f"ID{user.telegram_id}"
-        )
-        
-        # Сохраняем тип продукта как консультация
-        await state.update_data(product_type='consultation')
-        
-        # Показываем список консультаций сразу
-        consultations = get_all_consultations()
-        
-        if not consultations:
-            await message.answer(
-                "❌ Нет доступных консультаций",
-                reply_markup=get_back_to_admin_keyboard()
-            )
-            await state.clear()
-            return
-        
-        buttons = []
-        for cons in consultations:
-            buttons.append([InlineKeyboardButton(
-                text=f"{cons.get('emoji', '🔮')} {cons['name']}",
-                callback_data=f"paylink_cons_{cons['slug']}"
-            )])
-        
-        buttons.append([InlineKeyboardButton(text="◀️ Отмена", callback_data="admin_panel")])
-        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-        
+    
+    if not user:
         await message.answer(
-            f"✅ Пользователь найден: <b>{user.first_name or user.username or 'Пользователь'}</b>\n"
-            f"ID: <code>{user.telegram_id}</code>\n\n"
-            "🔮 Выберите консультацию:",
-            reply_markup=keyboard
+            "❌ Пользователь не найден в базе.\n\n"
+            "Убедитесь, что пользователь хотя бы раз запускал бота."
         )
+        return
     
-    finally:
-        db.close()
+    # Сохраняем данные пользователя
+    await state.update_data(
+        user_id=str(user.id),
+        telegram_id=user.telegram_id,
+        user_name=user.first_name or user.username or f"ID{user.telegram_id}"
+    )
+    
+    # Сохраняем тип продукта как консультация
+    await state.update_data(product_type='consultation')
+    
+    # Показываем список консультаций сразу
+    consultations = get_all_consultations()
+    
+    if not consultations:
+        await message.answer(
+            "❌ Нет доступных консультаций",
+            reply_markup=get_back_to_admin_keyboard()
+        )
+        await state.clear()
+        return
+    
+    buttons = []
+    for cons in consultations:
+        buttons.append([InlineKeyboardButton(
+            text=f"{cons.get('emoji', '🔮')} {cons['name']}",
+            callback_data=f"paylink_cons_{cons['slug']}"
+        )])
+    
+    buttons.append([InlineKeyboardButton(text="◀️ Отмена", callback_data="admin_panel")])
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+    await message.answer(
+        f"✅ Пользователь найден: <b>{user.first_name or user.username or 'Пользователь'}</b>\n"
+        f"ID: <code>{user.telegram_id}</code>\n\n"
+        "🔮 Выберите консультацию:",
+        reply_markup=keyboard
+    )
 
 
 @router.callback_query(F.data.startswith("paylink_cons_"))
@@ -1916,8 +1902,22 @@ async def process_consultation_selection(callback: CallbackQuery, state: FSMCont
             "Выберите вариант:",
             reply_markup=keyboard
         )
+    elif consultation.get('price'):
+        # Есть фиксированная цена - используем её автоматически
+        await state.update_data(amount=consultation['price'])
+        
+        # Показываем подтверждение и сразу создаем платеж
+        await callback.message.edit_text(
+            f"🔮 {consultation['name']}\n\n"
+            f"💰 Стоимость: {consultation['price']:,.0f} ₽\n\n"
+            f"⏳ Создаю платежную ссылку...",
+            reply_markup=None
+        )
+        
+        # Создаем платеж
+        await create_payment_link(callback.message, state)
     else:
-        # Нет вариантов - просим ввести сумму
+        # Нет ни вариантов, ни цены - просим ввести сумму вручную
         await callback.message.edit_text(
             f"🔮 {consultation['name']}\n\n"
             "Введите стоимость в рублях:\n\n"
@@ -1993,13 +1993,14 @@ async def create_payment_link(message: Message, state: FSMContext):
     
     data = await state.get_data()
     
-    user_id = data.get('user_id')
+    user_id_str = data.get('user_id')
     telegram_id = data.get('telegram_id')
     user_name = data.get('user_name')
     product_type = data.get('product_type')
     amount = data.get('amount')
     
-    db = get_db()
+    db = await get_db()
+    payment_repo = PaymentRepository(db)
     
     try:
         # Формируем описание
@@ -2018,7 +2019,7 @@ async def create_payment_link(message: Message, state: FSMContext):
         
         # Создаем платеж в БД
         payment = Payment(
-            user_id=user_id,
+            user_id=ObjectId(user_id_str),
             amount=amount,
             status='pending',
             product_type=product_type,
@@ -2034,9 +2035,7 @@ async def create_payment_link(message: Message, state: FSMContext):
         elif product_type == 'guide':
             payment.product_id = data.get('guide_id', 'guide-custom')
         
-        db.add(payment)
-        db.commit()
-        db.refresh(payment)
+        payment = await payment_repo.create(payment)
         
         # Создаем платеж в YooKassa
         yookassa = YooKassaPayment()
@@ -2049,25 +2048,25 @@ async def create_payment_link(message: Message, state: FSMContext):
             description=description,
             return_url=return_url,
             metadata={
-                'payment_db_id': payment.id,
+                'payment_db_id': str(payment.id),
                 'user_telegram_id': telegram_id
             }
         )
         
         if not payment_result:
+            await payment_repo.update(payment.id, {"status": "failed"})
             await message.answer(
                 "❌ Ошибка при создании платежа в YooKassa",
                 reply_markup=get_back_to_admin_keyboard()
             )
-            payment.status = 'failed'
-            db.commit()
             await state.clear()
             return
         
         # Обновляем платеж
-        payment.payment_id = payment_result['id']
-        payment.confirmation_url = payment_result['confirmation_url']
-        db.commit()
+        await payment_repo.update(payment.id, {
+            "payment_id": payment_result['id'],
+            "confirmation_url": payment_result['confirmation_url']
+        })
         
         # Отправляем ссылку админу
         await message.answer(
@@ -2089,7 +2088,4 @@ async def create_payment_link(message: Message, state: FSMContext):
             reply_markup=get_back_to_admin_keyboard()
         )
         await state.clear()
-    
-    finally:
-        db.close()
 
