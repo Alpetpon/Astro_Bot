@@ -136,7 +136,7 @@ async def notify_course_payment(bot: Bot, user: dict, payment: dict):
     text += "📚 Материалы курса скоро будут доступны в вашем кабинете!"
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📚 Мои курсы", callback_data="cabinet")],
+        [InlineKeyboardButton(text="📚 Мои курсы", callback_data="my_cabinet")],
         [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")]
     ])
     

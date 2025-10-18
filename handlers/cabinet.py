@@ -112,14 +112,9 @@ async def show_my_cabinet(callback: CallbackQuery):
 
 @router.callback_query(F.data == "my_courses")
 async def show_my_courses(callback: CallbackQuery):
-    """Показать мои курсы (заглушка)"""
-    await callback.message.edit_text(
-        "📚 <b>Мои курсы</b>\n\n"
-        "🔧 Раздел находится в разработке.\n"
-        "Скоро здесь появятся ваши курсы с доступом к урокам!",
-        reply_markup=get_back_keyboard("my_cabinet", "◀️ В кабинет")
-    )
-    await callback.answer()
+    """Перенаправление на личный кабинет (для совместимости)"""
+    # Перенаправляем на my_cabinet
+    await show_my_cabinet(callback)
 
 
 @router.callback_query(F.data.startswith("my_course_"))
@@ -184,11 +179,9 @@ async def show_my_course(callback: CallbackQuery):
             # Добавляем кнопки для каждого модуля
             for module in modules:
                 module_title = module.get('title', 'Модуль')
-                lessons_count = len(module.get('lessons', []))
                 
                 # Краткое название модуля для текста
-                text += f"▫️ {module_title}\n"
-                text += f"   📖 Уроков: {lessons_count}\n\n"
+                text += f"▫️ {module_title}\n\n"
                 
                 # Кнопка для перехода к модулю
                 buttons.append([InlineKeyboardButton(
@@ -293,7 +286,6 @@ async def show_module(callback: CallbackQuery):
             for i, lesson in enumerate(lessons, 1):
                 lesson_title = lesson.get('title', f'Урок {i}')
                 lesson_type = lesson.get('type', 'video')
-                duration = lesson.get('duration', '')
                 
                 # Эмодзи в зависимости от типа урока
                 type_emoji = {
@@ -305,8 +297,6 @@ async def show_module(callback: CallbackQuery):
                 
                 # Текст урока
                 text += f"{i}. {type_emoji} {lesson_title}\n"
-                if duration:
-                    text += f"   ⏱ {duration}\n"
                 
                 # Кнопка для урока
                 buttons.append([InlineKeyboardButton(
@@ -395,34 +385,33 @@ async def show_lesson(callback: CallbackQuery):
         if description:
             text += f"📝 {description}\n\n"
         
-        # Длительность
-        duration = lesson.get('duration', '')
-        if duration and duration != '—':
-            text += f"⏱ <b>Длительность:</b> {duration}\n\n"
+        # Отображение контента урока
+        has_content = False
         
-        # Информация о типе контента
-        if lesson_type == 'video':
-            # Проверяем наличие видео
-            video_url = lesson.get('video_url', '')
-            file_id = lesson.get('file_id', '')
-            
-            if video_url:
-                text += f"🎬 <a href='{video_url}'>Смотреть видео урока</a>\n\n"
-            elif file_id:
-                # Отправим видео отдельным сообщением
-                try:
-                    await callback.message.answer_video(
-                        video=file_id,
-                        caption=f"{type_emoji} {lesson['title']}"
-                    )
-                except Exception as e:
-                    logger.error(f"Error sending video: {e}")
-                    text += "❌ Ошибка при загрузке видео. Обратитесь в поддержку.\n\n"
+        # 1. Видео - теперь через кнопку
+        video_url = lesson.get('video_url', '')
+        if video_url:
+            text += "🎬 <b>Видео урока доступно для просмотра</b>\n\n"
+            has_content = True
+        
+        # 2. Лекция (PDF файл) - через кнопку
+        lecture_file_id = lesson.get('lecture_file_id', '')
+        if lecture_file_id:
+            text += "📄 <b>Лекция доступна для скачивания</b>\n\n"
+            has_content = True
+        
+        # 3. Текстовое содержание
+        text_content = lesson.get('text_content', '')
+        if text_content:
+            text += f"📝 <b>Содержание урока:</b>\n{text_content}\n\n"
+            has_content = True
+        
+        # Если нет контента
+        if not has_content:
+            if lesson_type == 'homework':
+                text += "✍️ Это домашнее задание для самостоятельной работы.\n\n"
             else:
-                text += "🔧 Видео урока скоро будет добавлено.\n\n"
-        
-        elif lesson_type == 'homework':
-            text += "✍️ Это домашнее задание для самостоятельной работы.\n\n"
+                text += "🔧 Материалы урока скоро будут добавлены.\n\n"
         
         # Дополнительные материалы
         materials = lesson.get('materials', [])
@@ -447,13 +436,23 @@ async def show_lesson(callback: CallbackQuery):
             text += "\n"
         
         # Кнопки навигации
-        buttons = [
+        buttons = []
+        
+        # Кнопка смотреть видео (если есть)
+        if video_url:
+            buttons.append([InlineKeyboardButton(text="🎬 Смотреть видео", url=video_url)])
+        
+        # Кнопка скачать лекцию (если есть)
+        if lecture_file_id:
+            buttons.append([InlineKeyboardButton(text="📄 Скачать лекцию", callback_data=f"download_lecture_{course_slug}_{module_id}_{lesson_id}")])
+        
+        buttons.extend([
             [InlineKeyboardButton(text="◀️ К модулю", callback_data=f"module_{course_slug}_{module_id}")],
             [
                 InlineKeyboardButton(text="📚 К курсу", callback_data=f"my_course_{course_slug}"),
                 InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")
             ]
-        ]
+        ])
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
         
@@ -467,3 +466,65 @@ async def show_lesson(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Error in show_lesson: {e}", exc_info=True)
         await callback.answer("Произошла ошибка при загрузке урока", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("download_lecture_"))
+async def download_lecture(callback: CallbackQuery):
+    """Скачать PDF лекцию урока"""
+    # Формат: download_lecture_{course_slug}_{module_id}_{lesson_id}
+    parts = callback.data.replace("download_lecture_", "").split("_", 2)
+    
+    if len(parts) < 3:
+        await callback.answer("Ошибка формата данных", show_alert=True)
+        return
+    
+    course_slug = parts[0]
+    module_id = parts[1]
+    lesson_id = parts[2]
+    
+    db = await get_db()
+    user_repo = UserRepository(db)
+    payment_repo = PaymentRepository(db)
+    
+    try:
+        # Проверяем доступ к курсу
+        user = await user_repo.get_by_telegram_id(callback.from_user.id)
+        
+        if not user:
+            await callback.answer("Ошибка: пользователь не найден", show_alert=True)
+            return
+        
+        payments = await payment_repo.get_user_payments(user.id)
+        payment = next((p for p in payments if p.course_slug == course_slug and p.status == 'succeeded' and p.product_type == 'course'), None)
+        
+        if not payment:
+            await callback.answer("У вас нет доступа к этому курсу", show_alert=True)
+            return
+        
+        # Получаем урок
+        lesson = get_lesson_by_id(course_slug, module_id, lesson_id)
+        
+        if not lesson:
+            await callback.answer("Урок не найден", show_alert=True)
+            return
+        
+        lecture_file_id = lesson.get('lecture_file_id', '')
+        
+        if not lecture_file_id:
+            await callback.answer("Лекция недоступна", show_alert=True)
+            return
+        
+        # Отправляем файл
+        try:
+            await callback.message.answer_document(
+                document=lecture_file_id,
+                caption=f"📄 Лекция: {lesson['title']}"
+            )
+            await callback.answer("✅ Лекция отправлена")
+        except Exception as e:
+            logger.error(f"Error sending lecture file: {e}")
+            await callback.answer("❌ Ошибка при загрузке лекции", show_alert=True)
+    
+    except Exception as e:
+        logger.error(f"Error in download_lecture: {e}", exc_info=True)
+        await callback.answer("Произошла ошибка", show_alert=True)

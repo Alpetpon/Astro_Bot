@@ -6,9 +6,12 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from bson import ObjectId
 import os
+import logging
 from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
+
+logger = logging.getLogger(__name__)
 
 from config import config
 from database import get_db, User, Payment, UserRepository, PaymentRepository
@@ -30,6 +33,8 @@ class CourseManagement(StatesGroup):
     waiting_for_lesson_description = State()
     waiting_for_lesson_content = State()
     waiting_for_lesson_video = State()
+    waiting_for_lesson_lecture_file = State()
+    waiting_for_lesson_text_content = State()
     editing_lesson_title = State()
     editing_lesson_description = State()
     editing_lesson_content = State()
@@ -410,13 +415,8 @@ async def show_courses_management(callback: CallbackQuery):
     else:
         buttons = []
         for course in courses:
-            # Подсчитываем уроки из course_materials.json
-            from data import get_course_materials
-            materials = get_course_materials(course['slug'])
-            lessons_count = len(materials) if materials else 0
-            
             buttons.append([InlineKeyboardButton(
-                text=f"{course.get('emoji', '📚')} {course['name']} ({lessons_count} уроков)",
+                text=f"{course.get('emoji', '📚')} {course['name']}",
                 callback_data=f"manage_course_{course['slug']}"
             )])
         
@@ -472,8 +472,7 @@ async def manage_course(callback: CallbackQuery):
     if modules:
         text += f"\n📂 <b>Модулей:</b> {len(modules)}\n\n"
         for module in modules:
-            lessons_count = len(module.get('lessons', []))
-            text += f"• {module.get('title', 'Без названия')} ({lessons_count} уроков)\n"
+            text += f"• {module.get('title', 'Без названия')}\n"
     else:
         text += "\nМодулей пока нет\n"
     
@@ -485,12 +484,6 @@ async def manage_course(callback: CallbackQuery):
             text="📂 Просмотр модулей",
             callback_data=f"view_modules_{course_slug}"
         )])
-    
-    # Кнопка добавления модуля
-    buttons.append([InlineKeyboardButton(
-        text="➕ Добавить модуль",
-        callback_data=f"add_module_{course_slug}"
-    )])
     
     buttons.append([InlineKeyboardButton(
         text="◀️ Назад к курсам",
@@ -525,11 +518,16 @@ async def view_modules(callback: CallbackQuery):
     
     buttons = []
     for module in modules:
-        lessons_count = len(module.get('lessons', []))
         buttons.append([InlineKeyboardButton(
-            text=f"📂 {module.get('title', 'Без названия')} ({lessons_count} уроков)",
+            text=f"📂 {module.get('title', 'Без названия')}",
             callback_data=f"view_module_{course_slug}_{module['id']}"
         )])
+    
+    # Кнопка добавления модуля
+    buttons.append([InlineKeyboardButton(
+        text="➕ Добавить модуль",
+        callback_data=f"add_module_{course_slug}"
+    )])
     
     buttons.append([InlineKeyboardButton(
         text="◀️ Назад к курсу",
@@ -790,24 +788,140 @@ async def save_new_module(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("skip_lesson_video_"))
 async def skip_lesson_video(callback: CallbackQuery, state: FSMContext):
-    """Пропустить видео и сохранить урок"""
+    """Пропустить видео и перейти к лекции"""
     if not is_admin(callback.from_user.id):
         await callback.answer("❌ Доступ запрещен", show_alert=True)
         return
     
     await state.update_data(video_url="")
+    
+    # Переходим к запросу PDF лекции
+    data = await state.get_data()
+    course_slug = data['course_slug']
+    module_id = data['module_id']
+    
+    await callback.message.edit_text(
+        "Теперь отправьте PDF файл лекции или нажмите 'Пропустить':",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⏭ Пропустить", callback_data=f"skip_lesson_lecture_{course_slug}_{module_id}")],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"view_module_{course_slug}_{module_id}")]
+        ])
+    )
+    await state.set_state(CourseManagement.waiting_for_lesson_lecture_file)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("skip_lesson_lecture_"))
+async def skip_lesson_lecture(callback: CallbackQuery, state: FSMContext):
+    """Пропустить PDF лекцию и перейти к текстовому содержимому"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    await state.update_data(lecture_file_id="")
+    
+    # Переходим к запросу текстового содержимого
+    data = await state.get_data()
+    course_slug = data['course_slug']
+    module_id = data['module_id']
+    
+    await callback.message.edit_text(
+        "Теперь отправьте текстовое содержание урока или нажмите 'Пропустить':",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⏭ Пропустить", callback_data=f"skip_lesson_text_{course_slug}_{module_id}")],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"view_module_{course_slug}_{module_id}")]
+        ])
+    )
+    await state.set_state(CourseManagement.waiting_for_lesson_text_content)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("skip_lesson_text_"))
+async def skip_lesson_text(callback: CallbackQuery, state: FSMContext):
+    """Пропустить текстовое содержание и сохранить урок"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    await state.update_data(text_content="")
     await save_new_lesson_to_module(callback.message, state)
     await callback.answer()
 
 
+async def process_lesson_lecture(message: Message, state: FSMContext):
+    """Получение PDF лекции для урока (вспомогательная функция для создания нового урока)"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    # Проверяем что это PDF
+    if not message.document.file_name.lower().endswith('.pdf'):
+        await message.answer("❌ Пожалуйста, отправьте PDF файл")
+        return
+    
+    lecture_file_id = message.document.file_id
+    await state.update_data(lecture_file_id=lecture_file_id)
+    
+    # Переходим к запросу текстового содержимого
+    data = await state.get_data()
+    course_slug = data['course_slug']
+    module_id = data['module_id']
+    
+    await message.answer(
+        "✅ PDF лекция сохранена\n\n"
+        "Теперь отправьте текстовое содержание урока или нажмите 'Пропустить':",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⏭ Пропустить", callback_data=f"skip_lesson_text_{course_slug}_{module_id}")],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"view_module_{course_slug}_{module_id}")]
+        ])
+    )
+    await state.set_state(CourseManagement.waiting_for_lesson_text_content)
+
+
+# Этот обработчик больше не нужен - логика перенесена в save_json_lesson_lecture
+# async def invalid_lecture_file(message: Message):
+#     """Обработка неверного формата файла лекции"""
+#     if not is_admin(message.from_user.id):
+#         return
+#     
+#     await message.answer(
+#         "❌ Пожалуйста, отправьте PDF файл (не ссылку, не изображение)\n\n"
+#         "Или нажмите 'Пропустить' для продолжения"
+#     )
+
+
 @router.message(CourseManagement.waiting_for_lesson_video)
 async def process_lesson_video(message: Message, state: FSMContext):
-    """Получение видео для урока"""
+    """Получение ссылки на видео для урока"""
     if not is_admin(message.from_user.id):
         return
     
     video_url = message.text.strip()
     await state.update_data(video_url=video_url)
+    
+    # Переходим к запросу PDF лекции
+    data = await state.get_data()
+    course_slug = data['course_slug']
+    module_id = data['module_id']
+    
+    await message.answer(
+        "✅ Ссылка на видео сохранена\n\n"
+        "Теперь отправьте PDF файл лекции или нажмите 'Пропустить':",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⏭ Пропустить", callback_data=f"skip_lesson_lecture_{course_slug}_{module_id}")],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"view_module_{course_slug}_{module_id}")]
+        ])
+    )
+    await state.set_state(CourseManagement.waiting_for_lesson_lecture_file)
+
+
+@router.message(CourseManagement.waiting_for_lesson_text_content)
+async def process_lesson_text_content(message: Message, state: FSMContext):
+    """Получение текстового содержания урока"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    text_content = message.text.strip()
+    await state.update_data(text_content=text_content)
     await save_new_lesson_to_module(message, state)
 
 
@@ -835,8 +949,9 @@ async def save_new_lesson_to_module(message: Message, state: FSMContext):
         'description': data.get('lesson_description', ''),
         'duration': '',
         'type': 'video',
-        'file_id': '',
         'video_url': data.get('video_url', ''),
+        'lecture_file_id': data.get('lecture_file_id', ''),
+        'text_content': data.get('text_content', ''),
         'order': lesson_order,
         'materials': []
     }
@@ -845,10 +960,22 @@ async def save_new_lesson_to_module(message: Message, state: FSMContext):
         success = add_lesson_to_module(course_slug, module_id, new_lesson)
         
         if success:
+            # Формируем информацию о добавленном контенте
+            content_info = []
+            if new_lesson['video_url']:
+                content_info.append("🎬 Видео")
+            if new_lesson['lecture_file_id']:
+                content_info.append("📄 PDF лекция")
+            if new_lesson['text_content']:
+                content_info.append("📝 Текст")
+            
+            content_text = ", ".join(content_info) if content_info else "Без контента"
+            
             await message.answer(
                 f"✅ <b>Урок успешно добавлен!</b>\n\n"
                 f"📝 {new_lesson['title']}\n"
-                f"📂 Модуль: {module['title']}",
+                f"📂 Модуль: {module['title']}\n"
+                f"📦 Контент: {content_text}",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="➕ Добавить еще урок", callback_data=f"add_lesson_to_module_{course_slug}_{module_id}")],
                     [InlineKeyboardButton(text="◀️ К модулю", callback_data=f"view_module_{course_slug}_{module_id}")]
@@ -908,55 +1035,570 @@ async def edit_lessons_list(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("edit_lesson_"))
 async def edit_lesson_menu(callback: CallbackQuery):
-    """Меню редактирования урока"""
+    """Меню редактирования урока (новый формат с JSON)"""
     if not is_admin(callback.from_user.id):
         await callback.answer("❌ Доступ запрещен", show_alert=True)
         return
     
-    lesson_id = int(callback.data.split("_")[2])
-    db: Session = get_db()
+    # Новый формат: edit_lesson_{course_slug}_{module_id}_{lesson_id}
+    parts = callback.data.split("_")
     
-    try:
-        lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
-        
-        if not lesson:
-            await callback.answer("Урок не найден", show_alert=True)
+    # Проверяем формат - если старый (только число), показываем сообщение
+    if len(parts) == 3:
+        try:
+            int(parts[2])  # Пытаемся преобразовать в число
+            await callback.answer("⚠️ Используйте новый интерфейс через 'Управление курсами'", show_alert=True)
             return
-        
-        text = f"✏️ <b>Редактирование урока</b>\n\n"
-        text += f"📍 Модуль {lesson.module_number}, Урок {lesson.lesson_number}\n"
-        text += f"📝 Название: {lesson.title}\n"
-        text += f"📄 Описание: {lesson.description[:100] if lesson.description else 'Не указано'}...\n"
-        text += f"📖 Контент: {'Есть' if lesson.content else 'Нет'}\n"
-        text += f"🎥 Видео: {'Есть' if lesson.video_url else 'Нет'}\n"
-        
-        buttons = [
-            [InlineKeyboardButton(text="✏️ Изменить название", callback_data=f"edit_title_{lesson_id}")],
-            [InlineKeyboardButton(text="✏️ Изменить описание", callback_data=f"edit_desc_{lesson_id}")],
-            [InlineKeyboardButton(text="✏️ Изменить контент", callback_data=f"edit_content_{lesson_id}")],
-            [InlineKeyboardButton(text="✏️ Изменить видео", callback_data=f"edit_video_{lesson_id}")],
-            [InlineKeyboardButton(text="🗑 Удалить урок", callback_data=f"delete_lesson_{lesson_id}")],
-            [InlineKeyboardButton(text="◀️ Назад", callback_data=f"edit_lessons_{lesson.course_id}")]
-        ]
-        
-        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-        
-        await callback.message.edit_text(text, reply_markup=keyboard)
+        except ValueError:
+            pass
     
-    finally:
-        db.close()
+    # Обработка нового формата
+    if len(parts) < 5:
+        await callback.answer("❌ Неверный формат данных", show_alert=True)
+        return
     
+    course_slug = parts[2]
+    module_id = parts[3]
+    lesson_id = parts[4]
+    
+    from data import get_lesson_by_id
+    
+    lesson = get_lesson_by_id(course_slug, module_id, lesson_id)
+    
+    if not lesson:
+        await callback.answer("Урок не найден", show_alert=True)
+        return
+    
+    text = f"✏️ <b>Редактирование урока</b>\n\n"
+    text += f"📝 Название: {lesson['title']}\n"
+    text += f"📄 Описание: {lesson.get('description', 'Не указано')[:100]}...\n\n"
+    
+    # Проверяем наличие контента
+    has_video = bool(lesson.get('video_url'))
+    has_lecture = bool(lesson.get('lecture_file_id'))
+    has_text = bool(lesson.get('text_content'))
+    
+    text += f"🎬 Видео: {'✅ Есть' if has_video else '❌ Нет'}\n"
+    text += f"📄 PDF лекция: {'✅ Есть' if has_lecture else '❌ Нет'}\n"
+    text += f"📝 Текст: {'✅ Есть' if has_text else '❌ Нет'}\n"
+    
+    buttons = [
+        [InlineKeyboardButton(text="✏️ Изменить название", callback_data=f"edit_json_title_{course_slug}_{module_id}_{lesson_id}")],
+        [InlineKeyboardButton(text="✏️ Изменить описание", callback_data=f"edit_json_desc_{course_slug}_{module_id}_{lesson_id}")],
+        [InlineKeyboardButton(text="🎬 Изменить видео", callback_data=f"edit_json_video_{course_slug}_{module_id}_{lesson_id}")],
+        [InlineKeyboardButton(text="📄 Изменить PDF лекцию", callback_data=f"edit_json_lecture_{course_slug}_{module_id}_{lesson_id}")],
+        [InlineKeyboardButton(text="📝 Изменить текст", callback_data=f"edit_json_text_{course_slug}_{module_id}_{lesson_id}")],
+        [InlineKeyboardButton(text="🗑 Удалить урок", callback_data=f"delete_json_lesson_{course_slug}_{module_id}_{lesson_id}")],
+        [InlineKeyboardButton(text="◀️ К модулю", callback_data=f"view_module_{course_slug}_{module_id}")]
+    ]
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+    await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("edit_title_"))
-async def edit_lesson_title_start(callback: CallbackQuery, state: FSMContext):
-    """Начало редактирования названия"""
+# ===== РЕДАКТИРОВАНИЕ УРОКОВ (JSON ФОРМАТ) =====
+
+@router.callback_query(F.data.startswith("edit_json_title_"))
+async def edit_json_lesson_title_start(callback: CallbackQuery, state: FSMContext):
+    """Начало редактирования названия урока (JSON)"""
     if not is_admin(callback.from_user.id):
         await callback.answer("❌ Доступ запрещен", show_alert=True)
         return
     
-    lesson_id = int(callback.data.split("_")[2])
+    parts = callback.data.split("_")
+    course_slug = parts[3]
+    module_id = parts[4]
+    lesson_id = parts[5]
+    
+    await state.update_data(course_slug=course_slug, module_id=module_id, lesson_id=lesson_id)
+    await state.set_state(CourseManagement.editing_lesson_title)
+    
+    await callback.message.edit_text(
+        "✏️ <b>Редактирование названия урока</b>\n\n"
+        "Отправьте новое название:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"edit_lesson_{course_slug}_{module_id}_{lesson_id}")]
+        ])
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("edit_json_desc_"))
+async def edit_json_lesson_desc_start(callback: CallbackQuery, state: FSMContext):
+    """Начало редактирования описания урока (JSON)"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    parts = callback.data.split("_")
+    course_slug = parts[3]
+    module_id = parts[4]
+    lesson_id = parts[5]
+    
+    await state.update_data(course_slug=course_slug, module_id=module_id, lesson_id=lesson_id)
+    await state.set_state(CourseManagement.editing_lesson_description)
+    
+    await callback.message.edit_text(
+        "✏️ <b>Редактирование описания урока</b>\n\n"
+        "Отправьте новое описание:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"edit_lesson_{course_slug}_{module_id}_{lesson_id}")]
+        ])
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("edit_json_video_"))
+async def edit_json_lesson_video_start(callback: CallbackQuery, state: FSMContext):
+    """Начало редактирования видео урока (JSON)"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    parts = callback.data.split("_")
+    course_slug = parts[3]
+    module_id = parts[4]
+    lesson_id = parts[5]
+    
+    await state.update_data(course_slug=course_slug, module_id=module_id, lesson_id=lesson_id)
+    await state.set_state(CourseManagement.editing_lesson_video)
+    
+    await callback.message.edit_text(
+        "🎬 <b>Редактирование видео урока</b>\n\n"
+        "Отправьте новую ссылку на видео или '-' для удаления:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"edit_lesson_{course_slug}_{module_id}_{lesson_id}")]
+        ])
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("edit_json_lecture_"))
+async def edit_json_lesson_lecture_start(callback: CallbackQuery, state: FSMContext):
+    """Начало редактирования PDF лекции урока (JSON)"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    parts = callback.data.split("_")
+    course_slug = parts[3]
+    module_id = parts[4]
+    lesson_id = parts[5]
+    
+    # Очищаем state и устанавливаем данные для редактирования
+    await state.clear()
+    await state.update_data(
+        course_slug=course_slug, 
+        module_id=module_id, 
+        lesson_id=lesson_id, 
+        editing_lecture=True,
+        adding_lesson=False  # явно указываем что это НЕ добавление
+    )
+    await state.set_state(CourseManagement.waiting_for_lesson_lecture_file)
+    
+    print(f"🎯 Начало редактирования PDF лекции для урока: {lesson_id}")
+    
+    await callback.message.edit_text(
+        "📄 <b>Редактирование PDF лекции урока</b>\n\n"
+        "Отправьте новый PDF файл или нажмите 'Удалить' для удаления существующей лекции:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🗑 Удалить лекцию", callback_data=f"remove_lecture_{course_slug}_{module_id}_{lesson_id}")],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"edit_lesson_{course_slug}_{module_id}_{lesson_id}")]
+        ])
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("remove_lecture_"))
+async def remove_json_lesson_lecture(callback: CallbackQuery, state: FSMContext):
+    """Удаление PDF лекции из урока"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    parts = callback.data.split("_")
+    course_slug = parts[2]
+    module_id = parts[3]
+    lesson_id = parts[4]
+    
+    from data import get_lesson_by_id, update_lesson
+    
+    lesson = get_lesson_by_id(course_slug, module_id, lesson_id)
+    if lesson:
+        lesson['lecture_file_id'] = ""
+        update_lesson(course_slug, module_id, lesson_id, lesson)
+        
+        await callback.answer("✅ PDF лекция удалена", show_alert=True)
+        await state.clear()
+        
+        # Возвращаемся к редактированию урока - показываем меню заново
+        text = f"✏️ <b>Редактирование урока</b>\n\n"
+        text += f"📝 Название: {lesson['title']}\n"
+        text += f"📄 Описание: {lesson.get('description', 'Не указано')[:100]}...\n\n"
+        
+        # Проверяем наличие контента
+        has_video = bool(lesson.get('video_url'))
+        has_lecture = False  # Мы только что удалили
+        has_text = bool(lesson.get('text_content'))
+        
+        text += f"🎬 Видео: {'✅ Есть' if has_video else '❌ Нет'}\n"
+        text += f"📄 PDF лекция: ❌ Нет\n"
+        text += f"📝 Текст: {'✅ Есть' if has_text else '❌ Нет'}\n"
+        
+        buttons = [
+            [InlineKeyboardButton(text="✏️ Изменить название", callback_data=f"edit_json_title_{course_slug}_{module_id}_{lesson_id}")],
+            [InlineKeyboardButton(text="✏️ Изменить описание", callback_data=f"edit_json_desc_{course_slug}_{module_id}_{lesson_id}")],
+            [InlineKeyboardButton(text="🎬 Изменить видео", callback_data=f"edit_json_video_{course_slug}_{module_id}_{lesson_id}")],
+            [InlineKeyboardButton(text="📄 Изменить PDF лекцию", callback_data=f"edit_json_lecture_{course_slug}_{module_id}_{lesson_id}")],
+            [InlineKeyboardButton(text="📝 Изменить текст", callback_data=f"edit_json_text_{course_slug}_{module_id}_{lesson_id}")],
+            [InlineKeyboardButton(text="🗑 Удалить урок", callback_data=f"delete_json_lesson_{course_slug}_{module_id}_{lesson_id}")],
+            [InlineKeyboardButton(text="◀️ К модулю", callback_data=f"view_module_{course_slug}_{module_id}")]
+        ]
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    else:
+        await callback.answer("❌ Урок не найден", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("edit_json_text_"))
+async def edit_json_lesson_text_start(callback: CallbackQuery, state: FSMContext):
+    """Начало редактирования текста урока (JSON)"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    parts = callback.data.split("_")
+    course_slug = parts[3]
+    module_id = parts[4]
+    lesson_id = parts[5]
+    
+    await state.update_data(course_slug=course_slug, module_id=module_id, lesson_id=lesson_id)
+    await state.set_state(CourseManagement.editing_lesson_content)
+    
+    await callback.message.edit_text(
+        "📝 <b>Редактирование текстового содержания урока</b>\n\n"
+        "Отправьте новый текст или '-' для удаления:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"edit_lesson_{course_slug}_{module_id}_{lesson_id}")]
+        ])
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("delete_json_lesson_"))
+async def delete_json_lesson_confirm(callback: CallbackQuery):
+    """Подтверждение удаления урока (JSON)"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    parts = callback.data.split("_")
+    course_slug = parts[3]
+    module_id = parts[4]
+    lesson_id = parts[5]
+    
+    from data import get_lesson_by_id
+    
+    lesson = get_lesson_by_id(course_slug, module_id, lesson_id)
+    
+    if not lesson:
+        await callback.answer("❌ Урок не найден", show_alert=True)
+        return
+    
+    text = f"⚠️ <b>Удаление урока</b>\n\n"
+    text += f"Вы уверены, что хотите удалить урок:\n"
+    text += f"<b>{lesson['title']}</b>?\n\n"
+    text += "Это действие нельзя отменить!"
+    
+    buttons = [
+        [InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"confirm_delete_json_{course_slug}_{module_id}_{lesson_id}")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data=f"edit_lesson_{course_slug}_{module_id}_{lesson_id}")]
+    ]
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("confirm_delete_json_"))
+async def delete_json_lesson_execute(callback: CallbackQuery):
+    """Выполнение удаления урока (JSON)"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    parts = callback.data.split("_")
+    course_slug = parts[3]
+    module_id = parts[4]
+    lesson_id = parts[5]
+    
+    from data import delete_lesson
+    
+    success = delete_lesson(course_slug, module_id, lesson_id)
+    
+    if success:
+        await callback.answer("✅ Урок удален", show_alert=True)
+        
+        # Возвращаемся к модулю - показываем его заново
+        from data import get_module_by_id, get_course_by_slug
+        
+        module = get_module_by_id(course_slug, module_id)
+        course = get_course_by_slug(course_slug)
+        
+        if not module or not course:
+            await callback.message.edit_text(
+                "❌ Ошибка при загрузке модуля",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="◀️ Назад", callback_data=f"manage_course_{course_slug}")]
+                ])
+            )
+            return
+        
+        text = f"📂 <b>{module['title']}</b>\n\n"
+        if module.get('description'):
+            text += f"{module['description']}\n\n"
+        
+        lessons = module.get('lessons', [])
+        if lessons:
+            text += f"📝 <b>Уроков: {len(lessons)}</b>\n\n"
+            for i, lesson in enumerate(lessons, 1):
+                text += f"{i}. {lesson.get('title', 'Без названия')}\n"
+        else:
+            text += "Уроков пока нет\n"
+        
+        buttons = []
+        
+        # Кнопки для редактирования уроков
+        if lessons:
+            for lesson in lessons:
+                buttons.append([InlineKeyboardButton(
+                    text=f"✏️ {lesson.get('title', 'Без названия')[:30]}...",
+                    callback_data=f"edit_lesson_{course_slug}_{module_id}_{lesson['id']}"
+                )])
+        
+        # Кнопка добавления урока
+        buttons.append([InlineKeyboardButton(
+            text="➕ Добавить урок",
+            callback_data=f"add_lesson_to_module_{course_slug}_{module_id}"
+        )])
+        
+        buttons.append([InlineKeyboardButton(
+            text="◀️ К модулям",
+            callback_data=f"view_modules_{course_slug}"
+        )])
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    else:
+        await callback.answer("❌ Ошибка при удалении урока", show_alert=True)
+
+
+# ===== ОБРАБОТЧИКИ СОХРАНЕНИЯ ИЗМЕНЕНИЙ =====
+
+@router.message(CourseManagement.editing_lesson_title)
+async def save_json_lesson_title(message: Message, state: FSMContext):
+    """Сохранение нового названия урока (JSON)"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    data = await state.get_data()
+    course_slug = data['course_slug']
+    module_id = data['module_id']
+    lesson_id = data['lesson_id']
+    
+    from data import get_lesson_by_id, update_lesson
+    
+    lesson = get_lesson_by_id(course_slug, module_id, lesson_id)
+    if lesson:
+        lesson['title'] = message.text.strip()
+        update_lesson(course_slug, module_id, lesson_id, lesson)
+        
+        await message.answer(
+            f"✅ Название урока обновлено!",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ К уроку", callback_data=f"edit_lesson_{course_slug}_{module_id}_{lesson_id}")]
+            ])
+        )
+    else:
+        await message.answer("❌ Урок не найден")
+    
+    await state.clear()
+
+
+@router.message(CourseManagement.editing_lesson_description)
+async def save_json_lesson_description(message: Message, state: FSMContext):
+    """Сохранение нового описания урока (JSON)"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    data = await state.get_data()
+    course_slug = data['course_slug']
+    module_id = data['module_id']
+    lesson_id = data['lesson_id']
+    
+    from data import get_lesson_by_id, update_lesson
+    
+    lesson = get_lesson_by_id(course_slug, module_id, lesson_id)
+    if lesson:
+        lesson['description'] = message.text.strip()
+        update_lesson(course_slug, module_id, lesson_id, lesson)
+        
+        await message.answer(
+            f"✅ Описание урока обновлено!",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ К уроку", callback_data=f"edit_lesson_{course_slug}_{module_id}_{lesson_id}")]
+            ])
+        )
+    else:
+        await message.answer("❌ Урок не найден")
+    
+    await state.clear()
+
+
+@router.message(CourseManagement.editing_lesson_video)
+async def save_json_lesson_video(message: Message, state: FSMContext):
+    """Сохранение новой ссылки на видео урока (JSON)"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    data = await state.get_data()
+    course_slug = data['course_slug']
+    module_id = data['module_id']
+    lesson_id = data['lesson_id']
+    
+    from data import get_lesson_by_id, update_lesson
+    
+    lesson = get_lesson_by_id(course_slug, module_id, lesson_id)
+    if lesson:
+        video_url = message.text.strip()
+        lesson['video_url'] = "" if video_url == "-" else video_url
+        update_lesson(course_slug, module_id, lesson_id, lesson)
+        
+        if video_url == "-":
+            msg = "✅ Видео удалено из урока!"
+        else:
+            msg = "✅ Ссылка на видео обновлена!"
+        
+        await message.answer(
+            msg,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ К уроку", callback_data=f"edit_lesson_{course_slug}_{module_id}_{lesson_id}")]
+            ])
+        )
+    else:
+        await message.answer("❌ Урок не найден")
+    
+    await state.clear()
+
+
+@router.message(CourseManagement.waiting_for_lesson_lecture_file, F.document)
+async def save_json_lesson_lecture(message: Message, state: FSMContext):
+    """Сохранение PDF лекции урока (создание или редактирование)"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    data = await state.get_data()
+    
+    # ОТЛАДКА: логируем данные
+    logger.info(f"🔍 PDF Upload - State data: editing_lecture={data.get('editing_lecture')}, lesson_id={data.get('lesson_id')}, adding_lesson={data.get('adding_lesson')}")
+    print(f"🔍 PDF Upload - State data: editing_lecture={data.get('editing_lecture')}, lesson_id={data.get('lesson_id')}, adding_lesson={data.get('adding_lesson')}")
+    
+    # Проверяем что это PDF
+    if not message.document.file_name.lower().endswith('.pdf'):
+        await message.answer("❌ Пожалуйста, отправьте PDF файл")
+        return
+    
+    # Проверяем, что это редактирование существующего урока, а не создание нового
+    # Редактирование: есть editing_lecture И есть lesson_id И НЕТ adding_lesson
+    if data.get('editing_lecture') and data.get('lesson_id') and not data.get('adding_lesson'):
+        # ЭТО РЕДАКТИРОВАНИЕ СУЩЕСТВУЮЩЕГО УРОКА
+        logger.info(f"✅ PDF Upload - РЕДАКТИРОВАНИЕ существующего урока: {data.get('lesson_id')}")
+        print(f"✅ PDF Upload - РЕДАКТИРОВАНИЕ существующего урока: {data.get('lesson_id')}")
+        course_slug = data['course_slug']
+        module_id = data['module_id']
+        lesson_id = data['lesson_id']
+        
+        from data import get_lesson_by_id, update_lesson
+        
+        lesson = get_lesson_by_id(course_slug, module_id, lesson_id)
+        if lesson:
+            lesson['lecture_file_id'] = message.document.file_id
+            update_lesson(course_slug, module_id, lesson_id, lesson)
+            
+            await message.answer(
+                "✅ PDF лекция обновлена!",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="◀️ К уроку", callback_data=f"edit_lesson_{course_slug}_{module_id}_{lesson_id}")]
+                ])
+            )
+        else:
+            await message.answer("❌ Урок не найден")
+        
+        await state.clear()
+        return
+    
+    # Это создание нового урока - продолжаем процесс
+    logger.info(f"➕ PDF Upload - СОЗДАНИЕ нового урока")
+    print(f"➕ PDF Upload - СОЗДАНИЕ нового урока")
+    await process_lesson_lecture(message, state)
+
+
+@router.message(CourseManagement.editing_lesson_content)
+async def save_json_lesson_text(message: Message, state: FSMContext):
+    """Сохранение нового текста урока (JSON)"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    data = await state.get_data()
+    course_slug = data['course_slug']
+    module_id = data['module_id']
+    lesson_id = data['lesson_id']
+    
+    from data import get_lesson_by_id, update_lesson
+    
+    lesson = get_lesson_by_id(course_slug, module_id, lesson_id)
+    if lesson:
+        text_content = message.text.strip()
+        lesson['text_content'] = "" if text_content == "-" else text_content
+        update_lesson(course_slug, module_id, lesson_id, lesson)
+        
+        if text_content == "-":
+            msg = "✅ Текстовое содержание удалено из урока!"
+        else:
+            msg = "✅ Текстовое содержание урока обновлено!"
+        
+        await message.answer(
+            msg,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ К уроку", callback_data=f"edit_lesson_{course_slug}_{module_id}_{lesson_id}")]
+            ])
+        )
+    else:
+        await message.answer("❌ Урок не найден")
+    
+    await state.clear()
+
+
+# ===== СТАРЫЕ ОБРАБОТЧИКИ ДЛЯ БД (DEPRECATED) =====
+
+@router.callback_query(F.data.startswith("edit_title_"))
+async def edit_lesson_title_start(callback: CallbackQuery, state: FSMContext):
+    """Начало редактирования названия (DEPRECATED - только для БД)"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    # Проверяем, это старый формат (только число) или новый
+    try:
+        lesson_id = int(callback.data.split("_")[2])
+        await callback.answer("⚠️ Используйте новый интерфейс через 'Управление курсами'", show_alert=True)
+        return
+    except:
+        pass
+    
     await state.update_data(editing_lesson_id=lesson_id)
     
     db: Session = get_db()
