@@ -49,10 +49,15 @@ async def show_video_settings(callback: CallbackQuery):
     
     text += "\nВыберите действие:"
     
-    await callback.message.edit_text(
-        text,
-        reply_markup=get_video_settings_keyboard(has_welcome, has_about_me)
-    )
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=get_video_settings_keyboard(has_welcome, has_about_me)
+        )
+    except Exception:
+        # Игнорируем ошибку если сообщение не изменилось
+        pass
+    
     await callback.answer()
 
 
@@ -122,15 +127,14 @@ async def delete_welcome_video(callback: CallbackQuery):
         await callback.answer("❌ Доступ запрещен", show_alert=True)
         return
     
-    success = delete_setting(WELCOME_VIDEO_KEY)
+    success = await delete_setting(WELCOME_VIDEO_KEY)
     
     if success:
-        await callback.answer("✅ Приветственное видео удалено", show_alert=True)
+        await callback.answer("✅ Приветственное видео удалено")
+        # Обновляем экран с новым содержимым
+        await show_video_settings(callback)
     else:
         await callback.answer("❌ Ошибка при удалении", show_alert=True)
-    
-    # Обновляем экран
-    await show_video_settings(callback)
 
 
 # ===== ВИДЕО "ОБО МНЕ" =====
@@ -199,15 +203,14 @@ async def delete_about_me_video(callback: CallbackQuery):
         await callback.answer("❌ Доступ запрещен", show_alert=True)
         return
     
-    success = delete_setting(ABOUT_ME_VIDEO_KEY)
+    success = await delete_setting(ABOUT_ME_VIDEO_KEY)
     
     if success:
-        await callback.answer("✅ Видео 'Обо мне' удалено", show_alert=True)
+        await callback.answer("✅ Видео 'Обо мне' удалено")
+        # Обновляем экран с новым содержимым
+        await show_video_settings(callback)
     else:
         await callback.answer("❌ Ошибка при удалении", show_alert=True)
-    
-    # Обновляем экран
-    await show_video_settings(callback)
 
 
 # ===== ОТМЕНА =====
