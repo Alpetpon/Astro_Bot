@@ -108,6 +108,13 @@ class PaymentRepository:
             {"$set": updates}
         )
     
+    async def update_by_payment_id(self, payment_id: str, updates: dict):
+        """Обновление платежа по YooKassa payment_id"""
+        await self.collection.update_one(
+            {"payment_id": payment_id},
+            {"$set": updates}
+        )
+    
     async def get_user_payments(self, user_id: ObjectId) -> List[Payment]:
         """Получение всех платежей пользователя"""
         cursor = self.collection.find({"user_id": user_id}).sort("created_at", -1)
@@ -174,6 +181,18 @@ class PaymentRepository:
         payments = []
         async for data in cursor:
             payments.append(Payment.from_dict(data))
+        return payments
+    
+    async def get_pending_since(self, since: datetime) -> List[dict]:
+        """Получение pending платежей с определенной даты (возвращает dict)"""
+        query = {
+            "status": "pending",
+            "created_at": {"$gte": since}
+        }
+        cursor = self.collection.find(query).sort("created_at", -1)
+        payments = []
+        async for data in cursor:
+            payments.append(data)
         return payments
 
 

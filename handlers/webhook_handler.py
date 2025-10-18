@@ -93,25 +93,24 @@ async def notify_user_payment_success(bot: Bot, payment: dict, db):
         db: База данных
     """
     try:
-        # Получаем пользователя
-        user_repo = UserRepository(db)
-        user = await user_repo.get_by_id(payment['user_id'])
+        # Получаем пользователя как dict
+        user_data = await db.users.find_one({"_id": payment['user_id']})
         
-        if not user:
+        if not user_data:
             logger.warning(f"User not found for payment {payment['_id']}")
             return
         
         # Формируем сообщение в зависимости от типа продукта
         if payment['product_type'] == 'course':
-            await notify_course_payment(bot, user, payment)
+            await notify_course_payment(bot, user_data, payment)
         elif payment['product_type'] == 'consultation':
-            await notify_consultation_payment(bot, user, payment)
+            await notify_consultation_payment(bot, user_data, payment)
         elif payment['product_type'] == 'guide':
-            await notify_guide_payment(bot, user, payment)
+            await notify_guide_payment(bot, user_data, payment)
         else:
             # Общее уведомление
             await bot.send_message(
-                chat_id=user['telegram_id'],
+                chat_id=user_data['telegram_id'],
                 text="✅ <b>Оплата успешна!</b>\n\nСпасибо за покупку! 🌟"
             )
     
@@ -235,9 +234,8 @@ async def notify_admin_new_payment(bot: Bot, payment: dict, db):
         if not config.ADMIN_ID:
             return
         
-        # Получаем пользователя
-        user_repo = UserRepository(db)
-        user = await user_repo.get_by_id(payment['user_id'])
+        # Получаем пользователя как dict
+        user = await db.users.find_one({"_id": payment['user_id']})
         
         if not user:
             logger.warning(f"User not found for admin notification")

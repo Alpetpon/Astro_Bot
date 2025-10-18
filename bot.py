@@ -19,6 +19,7 @@ from handlers import (
     admin_reviews_router,
     admin_video_router
 )
+from scheduler.payment_checker import start_payment_checker, stop_payment_checker
 
 
 # Настройка логирования
@@ -65,11 +66,19 @@ async def main():
     dp.include_router(payments_router)
     dp.include_router(cabinet_router)
     
+    # Запуск автоматической проверки платежей
+    logger.info("Starting payment checker...")
+    payment_checker = await start_payment_checker(bot, check_interval=60)
+    logger.info("✅ Платежи будут автоматически проверяться каждые 60 секунд")
+    
     # Запуск бота
     logger.info("Bot started successfully!")
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
+        # Останавливаем проверку платежей
+        await stop_payment_checker()
+        
         await mongodb.close()
         await bot.session.close()
 
