@@ -84,7 +84,7 @@ async def save_welcome_video(message: Message, state: FSMContext):
     file_id = message.video.file_id
     
     # Сохраняем в БД
-    success = set_setting(WELCOME_VIDEO_KEY, file_id)
+    success = await set_setting(WELCOME_VIDEO_KEY, file_id)
     
     if success:
         await message.answer(
@@ -161,7 +161,7 @@ async def save_about_me_video(message: Message, state: FSMContext):
     file_id = message.video.file_id
     
     # Сохраняем в БД
-    success = set_setting(ABOUT_ME_VIDEO_KEY, file_id)
+    success = await set_setting(ABOUT_ME_VIDEO_KEY, file_id)
     
     if success:
         await message.answer(
