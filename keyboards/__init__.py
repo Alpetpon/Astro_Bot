@@ -19,7 +19,9 @@ from .keyboards import (
     get_reviews_navigation_keyboard,
     get_admin_keyboard,
     get_bot_management_keyboard,
-    get_back_to_admin_keyboard
+    get_back_to_admin_keyboard,
+    get_mini_course_keyboard,
+    get_mini_course_tariff_keyboard
 )
 
 __all__ = [
@@ -43,6 +45,8 @@ __all__ = [
     'get_reviews_navigation_keyboard',
     'get_admin_keyboard',
     'get_bot_management_keyboard',
-    'get_back_to_admin_keyboard'
+    'get_back_to_admin_keyboard',
+    'get_mini_course_keyboard',
+    'get_mini_course_tariff_keyboard'
 ]
 

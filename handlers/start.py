@@ -4,7 +4,7 @@ from aiogram.types import Message, CallbackQuery
 
 from config import config
 from database import get_db, User, UserRepository
-from keyboards import get_start_keyboard
+from keyboards import get_main_menu_keyboard
 from utils.bot_settings import get_setting, WELCOME_VIDEO_KEY
 
 router = Router()
@@ -38,23 +38,16 @@ async def cmd_start(message: Message):
     # Отправляем приветственное видео, если оно настроено
     if welcome_video_id:
         try:
-            await message.answer_video(
-                video=welcome_video_id,
-                caption=config.WELCOME_TEXT,
-                reply_markup=get_start_keyboard()
-            )
+            await message.answer_video(video=welcome_video_id)
         except Exception:
-            # Если видео не отправилось, отправляем обычный текст
-            await message.answer(
-                config.WELCOME_TEXT,
-                reply_markup=get_start_keyboard()
-            )
-    else:
-        # Если видео не настроено, отправляем обычный текст
-        await message.answer(
-            config.WELCOME_TEXT,
-            reply_markup=get_start_keyboard()
-        )
+            pass
+    
+    # Отправляем главное меню отдельным сообщением
+    await message.answer(
+        "🏠 **Главное меню**\n\nВыберите интересующий раздел:",
+        reply_markup=get_main_menu_keyboard(),
+        parse_mode="Markdown"
+    )
 
 
 @router.callback_query(F.data == "start_back")
@@ -66,33 +59,22 @@ async def back_to_start(callback: CallbackQuery):
     try:
         # Удаляем предыдущее сообщение
         await callback.message.delete()
-        
-        # Отправляем приветственное видео, если оно настроено
-        if welcome_video_id:
-            try:
-                await callback.message.answer_video(
-                    video=welcome_video_id,
-                    caption=config.WELCOME_TEXT,
-                    reply_markup=get_start_keyboard()
-                )
-            except Exception:
-                # Если видео не отправилось, отправляем обычный текст
-                await callback.message.answer(
-                    config.WELCOME_TEXT,
-                    reply_markup=get_start_keyboard()
-                )
-        else:
-            # Если видео не настроено, отправляем обычный текст
-            await callback.message.answer(
-                config.WELCOME_TEXT,
-                reply_markup=get_start_keyboard()
-            )
     except Exception:
-        # Если не можем удалить сообщение, просто редактируем
-        await callback.message.edit_text(
-            config.WELCOME_TEXT,
-            reply_markup=get_start_keyboard()
-        )
+        pass
+    
+    # Отправляем приветственное видео, если оно настроено
+    if welcome_video_id:
+        try:
+            await callback.message.answer_video(video=welcome_video_id)
+        except Exception:
+            pass
+    
+    # Отправляем главное меню отдельным сообщением
+    await callback.message.answer(
+        "🏠 **Главное меню**\n\nВыберите интересующий раздел:",
+        reply_markup=get_main_menu_keyboard(),
+        parse_mode="Markdown"
+    )
     
     await callback.answer()
 

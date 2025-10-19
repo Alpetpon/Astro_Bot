@@ -5,7 +5,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardBut
 from bson import ObjectId
 
 from database import get_db, User, Payment, UserRepository, PaymentRepository
-from data import get_course_by_slug, get_tariff_by_id, get_consultation_by_slug, get_consultation_option, get_guide_by_id
+from data import get_course_by_slug, get_tariff_by_id, get_consultation_by_slug, get_consultation_option, get_guide_by_id, get_mini_course, get_mini_course_tariff
 from keyboards import get_payment_keyboard, get_back_keyboard
 from payments import YooKassaPayment
 
@@ -19,33 +19,60 @@ async def process_tariff_selection(callback: CallbackQuery):
     """Обработка выбора тарифа и создание платежа"""
     logger.info(f"User {callback.from_user.id} selecting tariff: {callback.data}")
     
-    # Формат: tariff_{course_slug}_{tariff_id}
-    parts = callback.data.split("_", 2)
-    if len(parts) < 3:
-        logger.warning(f"Invalid tariff callback data format: {callback.data}")
-        await callback.answer("Ошибка формата данных", show_alert=True)
-        return
-    
-    course_slug = parts[1]
-    tariff_id = parts[2]
+    # Проверяем, это мини-курс или обычный курс
+    if callback.data.startswith("tariff_mini_course_"):
+        # Формат: tariff_mini_course_{tariff_id}
+        course_slug = "mini_course"
+        tariff_id = callback.data.replace("tariff_mini_course_", "")
+    else:
+        # Формат: tariff_{course_slug}_{tariff_id}
+        parts = callback.data.split("_", 2)
+        if len(parts) < 3:
+            logger.warning(f"Invalid tariff callback data format: {callback.data}")
+            await callback.answer("Ошибка формата данных", show_alert=True)
+            return
+        
+        course_slug = parts[1]
+        tariff_id = parts[2]
     
     db = await get_db()
     user_repo = UserRepository(db)
     payment_repo = PaymentRepository(db)
     
     try:
-        # Получаем курс и тариф из JSON
-        course = get_course_by_slug(course_slug)
-        if not course:
-            logger.warning(f"Course not found: {course_slug}")
-            await callback.answer("Курс не найден", show_alert=True)
-            return
-        
-        tariff = get_tariff_by_id(course_slug, tariff_id)
-        if not tariff:
-            logger.warning(f"Tariff not found: {tariff_id} for course {course_slug}")
-            await callback.answer("Тариф не найден", show_alert=True)
-            return
+        # Определяем, это мини-курс или обычный курс
+        if course_slug == "mini_course":
+            # Получаем мини-курс и тариф
+            mini_course = get_mini_course()
+            if not mini_course or not mini_course.get('is_active', False):
+                logger.warning("Mini course not found or inactive")
+                await callback.answer("Мини-курс недоступен", show_alert=True)
+                return
+            
+            tariff = get_mini_course_tariff(tariff_id)
+            if not tariff:
+                logger.warning(f"Mini course tariff not found: {tariff_id}")
+                await callback.answer("Тариф не найден", show_alert=True)
+                return
+            
+            product_name = f"{mini_course.get('title', 'Мини-курс')} {mini_course.get('subtitle', '')}"
+            product_type = 'mini_course'
+        else:
+            # Получаем обычный курс и тариф из JSON
+            course = get_course_by_slug(course_slug)
+            if not course:
+                logger.warning(f"Course not found: {course_slug}")
+                await callback.answer("Курс не найден", show_alert=True)
+                return
+            
+            tariff = get_tariff_by_id(course_slug, tariff_id)
+            if not tariff:
+                logger.warning(f"Tariff not found: {tariff_id} for course {course_slug}")
+                await callback.answer("Тариф не найден", show_alert=True)
+                return
+            
+            product_name = course['name']
+            product_type = 'course'
         
         user = await user_repo.get_by_telegram_id(callback.from_user.id)
         if not user:
@@ -60,14 +87,14 @@ async def process_tariff_selection(callback: CallbackQuery):
             tariff_id=tariff_id,
             amount=tariff['price'],
             status='pending',
-            product_type='course'
+            product_type=product_type
         )
         payment = await payment_repo.create(payment)
         
         logger.info(f"Payment created in DB: {payment.id} for user {user.id}")
         
         # Создаем платеж в ЮKassa
-        description = f"Оплата курса «{course['name']}» - {tariff['name']}"
+        description = f"Оплата: «{product_name}» - {tariff['name']}"
         
         # Получаем информацию о боте для return_url
         bot_info = await callback.bot.get_me()
@@ -82,9 +109,10 @@ async def process_tariff_selection(callback: CallbackQuery):
         if not payment_result:
             await payment_repo.update(payment.id, {"status": "failed"})
             logger.error(f"Failed to create payment in YooKassa for payment {payment.id}")
+            back_callback = "mini_course" if product_type == 'mini_course' else "courses"
             await callback.message.edit_text(
                 "❌ Ошибка при создании платежа. Попробуйте позже.",
-                reply_markup=get_back_keyboard("courses")
+                reply_markup=get_back_keyboard(back_callback)
             )
             await callback.answer()
             return
@@ -98,19 +126,27 @@ async def process_tariff_selection(callback: CallbackQuery):
         # Формируем сообщение об оплате
         support_text = "✅ С сопровождением куратора" if tariff.get('with_support') else "📚 Самостоятельное обучение"
         
-        text = f"💳 **Оплата курса**\n\n"
-        text += f"**Курс:** {course['name']}\n"
+        product_label = "Мини-курс" if product_type == 'mini_course' else "Курс"
+        text = f"💳 **Оплата {product_label.lower()}а**\n\n"
+        text += f"**{product_label}:** {product_name}\n"
         text += f"**Тариф:** {tariff['name']}\n"
         text += f"**Формат:** {support_text}\n"
         text += f"**Стоимость:** {tariff['price']} ₽\n\n"
         text += "Нажмите кнопку «Оплатить» для перехода на страницу оплаты.\n"
-        text += "После успешной оплаты доступ к курсу откроется автоматически!"
+        text += f"После успешной оплаты доступ к {product_label.lower()}у откроется автоматически!"
         
         await callback.message.edit_text(
             text,
             reply_markup=get_payment_keyboard(payment_result['confirmation_url'], str(payment.id)),
             parse_mode="Markdown"
         )
+        
+        # Сохраняем chat_id и message_id для последующего редактирования
+        await payment_repo.update(payment.id, {
+            "chat_id": callback.message.chat.id,
+            "message_id": callback.message.message_id
+        })
+        
         await callback.answer()
     
     except Exception as e:
@@ -185,27 +221,61 @@ async def check_payment_status(callback: CallbackQuery):
                     else:
                         await callback.answer("✅ Оплата подтверждена!", show_alert=True)
                 else:
-                    # Курс оплачен
-                    course = get_course_by_slug(payment.course_slug)
-                    tariff = get_tariff_by_id(payment.course_slug, payment.tariff_id) if course else None
-                    
-                    if course:
-                        success_text = "✅ **Оплата успешна!**\n\n"
-                        success_text += f"Вам открыт доступ к курсу «{course['name']}»\n\n"
+                    # Курс или мини-курс оплачен
+                    if payment.course_slug == "mini_course":
+                        # Мини-курс
+                        mini_course = get_mini_course()
+                        tariff = get_mini_course_tariff(payment.tariff_id) if mini_course else None
                         
-                        if tariff and tariff.get('with_support'):
-                            success_text += "👨‍🏫 В ближайшее время с вами свяжется куратор.\n\n"
-                        
-                        success_text += "📚 Материалы курса скоро будут доступны в вашем кабинете!"
-                        
-                        await callback.message.edit_text(
-                            success_text,
-                            reply_markup=get_back_keyboard("main_menu", "🏠 Главное меню"),
-                            parse_mode="Markdown"
-                        )
-                        await callback.answer("✅ Доступ открыт!", show_alert=True)
+                        if mini_course:
+                            success_text = f"🎉 Поздравляем с покупкой!\n\n"
+                            success_text += f"Вам открыт доступ к мини-курсу «{mini_course.get('title', 'Мини-курс')}»\n\n"
+                            
+                            if tariff and tariff.get('with_support'):
+                                success_text += "👨‍🏫 В ближайшее время с вами свяжется куратор.\n\n"
+                            
+                            success_text += "📚 Материалы курса доступны в вашем кабинете!"
+                            
+                            # Создаем кнопку "Мои курсы"
+                            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                                [InlineKeyboardButton(text="📚 Мои курсы", callback_data="my_courses")]
+                            ])
+                            
+                            await callback.message.edit_text(
+                                success_text,
+                                reply_markup=keyboard,
+                                parse_mode="HTML"
+                            )
+                            await callback.answer("✅ Доступ открыт!", show_alert=True)
+                        else:
+                            await callback.answer("✅ Оплата подтверждена!", show_alert=True)
                     else:
-                        await callback.answer("✅ Оплата подтверждена!", show_alert=True)
+                        # Обычный курс
+                        course = get_course_by_slug(payment.course_slug)
+                        tariff = get_tariff_by_id(payment.course_slug, payment.tariff_id) if course else None
+                        
+                        if course:
+                            success_text = f"🎉 Поздравляем с покупкой!\n\n"
+                            success_text += f"Вам открыт доступ к курсу «{course['name']}»\n\n"
+                            
+                            if tariff and tariff.get('with_support'):
+                                success_text += "👨‍🏫 В ближайшее время с вами свяжется куратор.\n\n"
+                            
+                            success_text += "📚 Материалы курса доступны в вашем кабинете!"
+                            
+                            # Создаем кнопку "Мои курсы"
+                            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                                [InlineKeyboardButton(text="📚 Мои курсы", callback_data="my_courses")]
+                            ])
+                            
+                            await callback.message.edit_text(
+                                success_text,
+                                reply_markup=keyboard,
+                                parse_mode="HTML"
+                            )
+                            await callback.answer("✅ Доступ открыт!", show_alert=True)
+                        else:
+                            await callback.answer("✅ Оплата подтверждена!", show_alert=True)
             else:
                 await callback.answer("⏳ Платеж еще не обработан. Попробуйте через минуту.", show_alert=True)
         else:

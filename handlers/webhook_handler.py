@@ -101,7 +101,7 @@ async def notify_user_payment_success(bot: Bot, payment: dict, db):
             return
         
         # Формируем сообщение в зависимости от типа продукта
-        if payment['product_type'] == 'course':
+        if payment['product_type'] in ['course', 'mini_course']:
             await notify_course_payment(bot, user_data, payment)
         elif payment['product_type'] == 'consultation':
             await notify_consultation_payment(bot, user_data, payment)
@@ -119,32 +119,75 @@ async def notify_user_payment_success(bot: Bot, payment: dict, db):
 
 
 async def notify_course_payment(bot: Bot, user: dict, payment: dict):
-    """Уведомление об оплате курса"""
-    course = get_course_by_slug(payment.get('course_slug'))
-    tariff = get_tariff_by_id(payment.get('course_slug'), payment.get('tariff_id')) if course else None
+    """Уведомление об оплате курса или мини-курса"""
+    course_slug = payment.get('course_slug')
     
-    if not course:
-        logger.warning(f"Course {payment.get('course_slug')} not found")
-        return
+    # Определяем, это мини-курс или обычный курс
+    if course_slug == 'mini_course':
+        from data import get_mini_course, get_mini_course_tariff
+        mini_course = get_mini_course()
+        tariff = get_mini_course_tariff(payment.get('tariff_id')) if mini_course else None
+        
+        if not mini_course:
+            logger.warning("Mini course not found")
+            return
+        
+        text = f"🎉 <b>Поздравляем с покупкой!</b>\n\n"
+        text += f"Вам открыт доступ к мини-курсу «{mini_course.get('title', 'Мини-курс')}»\n\n"
+        
+        if tariff and tariff.get('with_support'):
+            text += "👨‍🏫 В ближайшее время с вами свяжется куратор.\n\n"
+        
+        text += "📚 Материалы курса доступны в вашем кабинете!"
+    else:
+        # Обычный курс
+        course = get_course_by_slug(course_slug)
+        tariff = get_tariff_by_id(course_slug, payment.get('tariff_id')) if course else None
+        
+        if not course:
+            logger.warning(f"Course {course_slug} not found")
+            return
+        
+        text = f"🎉 <b>Поздравляем с покупкой!</b>\n\n"
+        text += f"Вам открыт доступ к курсу «{course['name']}»\n\n"
+        
+        if tariff and tariff.get('with_support'):
+            text += "👨‍🏫 В ближайшее время с вами свяжется куратор.\n\n"
+        
+        text += "📚 Материалы курса доступны в вашем кабинете!"
     
-    text = "✅ <b>Оплата успешна!</b>\n\n"
-    text += f"Вам открыт доступ к курсу «{course['name']}»\n\n"
-    
-    if tariff and tariff.get('with_support'):
-        text += "👨‍🏫 В ближайшее время с вами свяжется куратор.\n\n"
-    
-    text += "📚 Материалы курса скоро будут доступны в вашем кабинете!"
-    
+    # Только кнопка "Мои курсы"
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📚 Мои курсы", callback_data="my_cabinet")],
-        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")]
+        [InlineKeyboardButton(text="📚 Мои курсы", callback_data="my_courses")]
     ])
     
-    await bot.send_message(
-        chat_id=user['telegram_id'],
-        text=text,
-        reply_markup=keyboard
-    )
+    # Если есть chat_id и message_id - редактируем сообщение, иначе отправляем новое
+    if payment.get('chat_id') and payment.get('message_id'):
+        try:
+            await bot.edit_message_text(
+                chat_id=payment['chat_id'],
+                message_id=payment['message_id'],
+                text=text,
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to edit message, sending new one: {e}")
+            # Если не удалось отредактировать - отправляем новое
+            await bot.send_message(
+                chat_id=user['telegram_id'],
+                text=text,
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+    else:
+        # Для старых платежей без сохраненных chat_id/message_id
+        await bot.send_message(
+            chat_id=user['telegram_id'],
+            text=text,
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
 
 
 async def notify_consultation_payment(bot: Bot, user: dict, payment: dict):

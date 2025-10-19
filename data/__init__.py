@@ -436,6 +436,35 @@ def delete_lesson(course_slug: str, module_id: str, lesson_id: str) -> bool:
     return False
 
 
+# ==================== Мини-курс ====================
+
+def get_mini_course() -> Optional[Dict]:
+    """Получить данные мини-курса"""
+    try:
+        data = load_json('mini_course.json')
+        return data.get('mini_course')
+    except Exception:
+        return None
+
+
+def get_mini_course_tariff(tariff_id: str) -> Optional[Dict]:
+    """Получить тариф мини-курса по ID"""
+    mini_course = get_mini_course()
+    if not mini_course:
+        return None
+    
+    for tariff in mini_course.get('tariffs', []):
+        if tariff['id'] == tariff_id:
+            return tariff
+    return None
+
+
+def save_mini_course(mini_course_data: Dict) -> None:
+    """Сохранить данные мини-курса"""
+    data = {'mini_course': mini_course_data}
+    save_json('mini_course.json', data)
+
+
 # Для удобства экспортируем функции
 __all__ = [
     # Чтение курсов
@@ -470,6 +499,10 @@ __all__ = [
     'get_all_reviews',
     'get_review_by_id',
     'get_active_reviews',
+    # Мини-курс
+    'get_mini_course',
+    'get_mini_course_tariff',
+    'save_mini_course',
     # Запись
     'save_course',
     'save_courses',

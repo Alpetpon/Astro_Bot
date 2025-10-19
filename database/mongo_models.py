@@ -106,6 +106,8 @@ class Payment:
         payment_id: Optional[str] = None,
         confirmation_url: Optional[str] = None,
         is_payment_link: bool = False,
+        chat_id: Optional[int] = None,
+        message_id: Optional[int] = None,
         created_at: Optional[datetime] = None,
         paid_at: Optional[datetime] = None,
         _id: Optional[ObjectId] = None
@@ -124,6 +126,8 @@ class Payment:
         self.payment_id = payment_id
         self.confirmation_url = confirmation_url
         self.is_payment_link = is_payment_link
+        self.chat_id = chat_id
+        self.message_id = message_id
         self.created_at = created_at or datetime.utcnow()
         self.paid_at = paid_at
     
@@ -143,6 +147,8 @@ class Payment:
             "payment_id": self.payment_id,
             "confirmation_url": self.confirmation_url,
             "is_payment_link": self.is_payment_link,
+            "chat_id": self.chat_id,
+            "message_id": self.message_id,
             "created_at": self.created_at,
             "paid_at": self.paid_at
         }
@@ -170,6 +176,8 @@ class Payment:
             payment_id=data.get("payment_id"),
             confirmation_url=data.get("confirmation_url"),
             is_payment_link=data.get("is_payment_link", False),
+            chat_id=data.get("chat_id"),
+            message_id=data.get("message_id"),
             created_at=data.get("created_at"),
             paid_at=data.get("paid_at")
         )

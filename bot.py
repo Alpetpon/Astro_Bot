@@ -17,7 +17,8 @@ from handlers import (
     admin_router,
     admin_guides_router,
     admin_reviews_router,
-    admin_video_router
+    admin_video_router,
+    admin_mini_course_router
 )
 from scheduler.payment_checker import start_payment_checker, stop_payment_checker
 
@@ -37,14 +38,16 @@ async def main():
     await mongodb.connect(config.MONGODB_URL, config.MONGODB_DB_NAME)
     
     # Логируем состояние данных
-    from data import get_all_courses, get_all_consultations, get_all_guides
+    from data import get_all_courses, get_all_consultations, get_all_guides, get_mini_course
     
     # Все данные теперь из JSON
     courses = get_all_courses()
     consultations = get_all_consultations()
     guides = get_all_guides()
+    mini_course = get_mini_course()
     
-    logger.info(f"Data loaded: {len(courses)} courses, {len(consultations)} consultations, {len(guides)} guides (all from JSON)")
+    mini_course_status = "loaded" if mini_course else "not found"
+    logger.info(f"Data loaded: {len(courses)} courses, {len(consultations)} consultations, {len(guides)} guides, mini-course: {mini_course_status} (all from JSON)")
     
     # Создание бота и диспетчера
     bot = Bot(
@@ -59,6 +62,7 @@ async def main():
     dp.include_router(admin_guides_router)
     dp.include_router(admin_reviews_router)
     dp.include_router(admin_video_router)
+    dp.include_router(admin_mini_course_router)
     dp.include_router(menu_router)
     dp.include_router(courses_router)
     dp.include_router(consultations_router)

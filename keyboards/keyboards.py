@@ -14,10 +14,12 @@ def get_start_keyboard() -> InlineKeyboardMarkup:
 def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     """Главное меню"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="👤 Обо мне", callback_data="about_me")],
         [InlineKeyboardButton(text="💕 Гайды", callback_data="guides_list")],
-        [InlineKeyboardButton(text="🔮 Консультации", callback_data="consultations")],
+        [InlineKeyboardButton(text="🌌 Мини курс", callback_data="mini_course")],
         [InlineKeyboardButton(text="📚 Курсы", callback_data="courses")],
         [InlineKeyboardButton(text="⭐️ Отзывы", callback_data="reviews")],
+        [InlineKeyboardButton(text="🔮 Консультации", callback_data="consultations")],
         [InlineKeyboardButton(text="🏠 Мой кабинет", callback_data="my_cabinet")]
     ])
     return keyboard
@@ -41,7 +43,7 @@ def get_about_me_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="ВКонтакте", url=config.VK_URL)],
         [InlineKeyboardButton(text="Telegram канал", url=config.TELEGRAM_CHANNEL_URL)],
         [InlineKeyboardButton(text="Дзен", url=config.DZEN_URL)],
-        [InlineKeyboardButton(text="◀️ Назад", callback_data="start_back")]
+        [InlineKeyboardButton(text="◀️ Назад в меню", callback_data="main_menu")]
     ])
     return keyboard
 
@@ -357,6 +359,7 @@ def get_admin_keyboard() -> InlineKeyboardMarkup:
 def get_bot_management_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура подменю управления ботом"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🌌 Управление мини-курсом", callback_data="admin_mini_course")],
         [InlineKeyboardButton(text="📚 Управление курсами", callback_data="admin_courses")],
         [InlineKeyboardButton(text="🔮 Управление консультациями", callback_data="admin_consultations")],
         [InlineKeyboardButton(text="💕 Управление гайдами", callback_data="admin_guides")],
@@ -447,5 +450,43 @@ def get_reviews_navigation_keyboard(page: int = 0, total_pages: int = 1) -> Inli
     buttons.append([InlineKeyboardButton(text="🏠 Назад в меню", callback_data="main_menu")])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    return keyboard
+
+
+def get_mini_course_keyboard(show_navigation: bool = True) -> InlineKeyboardMarkup:
+    """Клавиатура для мини-курса"""
+    buttons = []
+    
+    # Навигация между разделами
+    if show_navigation:
+        buttons.append([
+            InlineKeyboardButton(text="📖 О курсе", callback_data="mini_course_about"),
+            InlineKeyboardButton(text="📋 Программа", callback_data="mini_course_program")
+        ])
+        buttons.append([
+            InlineKeyboardButton(text="💰 Стоимость", callback_data="mini_course_price")
+        ])
+    
+    # Кнопка записи
+    buttons.append([
+        InlineKeyboardButton(text="✅ Записаться на мини-курс", callback_data="mini_course_register")
+    ])
+    
+    # Назад
+    buttons.append([
+        InlineKeyboardButton(text="◀️ Назад в меню", callback_data="main_menu")
+    ])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    return keyboard
+
+
+def get_mini_course_tariff_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора тарифа мини-курса"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📚 Самостоятельное изучение — 5000 ₽", callback_data="tariff_mini_course_mini-solo")],
+        [InlineKeyboardButton(text="👨‍🏫 С сопровождением — 10000 ₽", callback_data="tariff_mini_course_mini-support")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="mini_course")]
+    ])
     return keyboard
 
