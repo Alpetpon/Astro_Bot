@@ -378,7 +378,7 @@ def get_back_to_admin_keyboard() -> InlineKeyboardMarkup:
     return keyboard
 
 
-def get_video_settings_keyboard(has_welcome_video: bool = False, has_about_me_video: bool = False) -> InlineKeyboardMarkup:
+def get_video_settings_keyboard(has_welcome_video: bool = False) -> InlineKeyboardMarkup:
     """Клавиатура настроек видео"""
     buttons = []
     
@@ -393,19 +393,6 @@ def get_video_settings_keyboard(has_welcome_video: bool = False, has_about_me_vi
     else:
         buttons.append([
             InlineKeyboardButton(text="➕ Загрузить приветственное видео", callback_data="video_welcome_upload")
-        ])
-    
-    # Видео "Обо мне"
-    if has_about_me_video:
-        buttons.append([
-            InlineKeyboardButton(text="🔄 Заменить видео 'Обо мне'", callback_data="video_about_me_upload")
-        ])
-        buttons.append([
-            InlineKeyboardButton(text="🗑 Удалить видео 'Обо мне'", callback_data="video_about_me_delete")
-        ])
-    else:
-        buttons.append([
-            InlineKeyboardButton(text="➕ Загрузить видео 'Обо мне'", callback_data="video_about_me_upload")
         ])
     
     # Кнопка назад
