@@ -166,6 +166,12 @@ async def download_guide(callback: CallbackQuery):
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
         
+        # Удаляем предыдущее сообщение с описанием
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass  # Игнорируем ошибки удаления
+        
         # Отправляем файл с кнопками
         await callback.message.answer_document(
             document=file_id,
