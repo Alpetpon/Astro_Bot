@@ -40,31 +40,24 @@ async def navigate_back(callback: CallbackQuery, state: FSMContext):
         'guides_list': show_guides_list,
         'about_me': show_about_me,
         'mini_course': show_mini_course,
-        'courses': courses.show_courses_list,
-        'consultations': consultations.show_consultations_list,
-        'reviews': reviews.show_reviews_list,
+        'courses': courses.show_courses_catalog,
+        'consultations': consultations.show_consultations_catalog,
+        'reviews': reviews.show_reviews_page,
         'my_cabinet': cabinet.show_my_cabinet,
         'my_courses': cabinet.show_my_courses,
     }
     
     # Если это специфичный callback (например, course_xxx), обрабатываем отдельно
-    if target_callback.startswith('course_about_'):
-        await courses.show_course_about(wrapped_callback)
-    elif target_callback.startswith('course_price_'):
-        await courses.show_course_price(wrapped_callback)
-    elif target_callback.startswith('course_register_'):
-        await courses.show_course_register(wrapped_callback)
+    if target_callback.startswith('course_register_'):
+        await courses.show_tariff_selection(wrapped_callback)
     elif target_callback.startswith('course_'):
-        await courses.show_course_details(wrapped_callback)
+        # course_, course_about_, course_price_ все обрабатываются одним handler
+        await courses.show_course_detail(wrapped_callback)
     elif target_callback.startswith('guide_'):
         await show_guide(wrapped_callback)
-    elif target_callback.startswith('consultation_info_'):
-        await consultations.show_consultation_info(wrapped_callback)
-    elif target_callback.startswith('consultation_details_'):
-        await consultations.show_consultation_details(wrapped_callback)
-    elif target_callback.startswith('consultation_price_'):
-        await consultations.show_consultation_price(wrapped_callback)
     elif target_callback.startswith('consultation_'):
+        # consultation_, consultation_info_, consultation_details_, consultation_price_ 
+        # все обрабатываются одним handler
         await consultations.show_consultation_detail(wrapped_callback)
     elif target_callback.startswith('mini_course_'):
         # Обрабатываем подразделы мини-курса
