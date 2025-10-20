@@ -169,7 +169,7 @@ async def download_guide(callback: CallbackQuery):
         # Отправляем файл с кнопками
         await callback.message.answer_document(
             document=file_id,
-            caption=f"📥 {guide.get('emoji') or '💝'} {guide['name']}\n\n🎁 Приятного изучения!",
+            caption=f"{guide.get('emoji') or '💝'} {guide['name']}",
             reply_markup=keyboard
         )
         

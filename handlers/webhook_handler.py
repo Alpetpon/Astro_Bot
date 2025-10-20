@@ -229,13 +229,6 @@ async def notify_guide_payment(bot: Bot, user: dict, payment: dict):
     file_id = guide.get('file_id')
     
     if file_id:
-        # Отправляем файл
-        await bot.send_document(
-            chat_id=user['telegram_id'],
-            document=file_id,
-            caption=f"✅ <b>Оплата успешна!</b>\n\n{guide.get('emoji', '💝')} Ваш {guide['name']} готов!\n\nЖелаем вам успехов в изучении! 🌟"
-        )
-        
         # Кнопки навигации
         buttons = []
         
@@ -252,9 +245,11 @@ async def notify_guide_payment(bot: Bot, user: dict, payment: dict):
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
         
-        await bot.send_message(
+        # Отправляем файл с кнопками
+        await bot.send_document(
             chat_id=user['telegram_id'],
-            text="Приятного изучения! 📖",
+            document=file_id,
+            caption=f"✅ <b>Оплата успешна!</b>\n\n{guide.get('emoji', '💝')} Ваш {guide['name']} готов!\n\nЖелаем вам успехов в изучении! 🌟",
             reply_markup=keyboard
         )
     else:
