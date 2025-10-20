@@ -40,6 +40,7 @@ async def navigate_back(callback: CallbackQuery, state: FSMContext):
         'guides_list': show_guides_list,
         'about_me': show_about_me,
         'mini_course': show_mini_course,
+        'mini_course_price': show_mini_course_price,
         'courses': courses.show_courses_catalog,
         'consultations': consultations.show_consultations_catalog,
         'reviews': reviews.show_reviews_page,
@@ -50,8 +51,9 @@ async def navigate_back(callback: CallbackQuery, state: FSMContext):
     # Если это специфичный callback (например, course_xxx), обрабатываем отдельно
     if target_callback.startswith('course_register_'):
         await courses.show_tariff_selection(wrapped_callback)
+    elif target_callback.startswith('course_price_'):
+        await courses.show_course_price(wrapped_callback)
     elif target_callback.startswith('course_'):
-        # course_, course_about_, course_price_ все обрабатываются одним handler
         await courses.show_course_detail(wrapped_callback)
     elif target_callback.startswith('guide_'):
         await show_guide(wrapped_callback)
@@ -87,39 +89,59 @@ async def navigate_back(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "main_menu")
 async def show_main_menu(callback: CallbackQuery):
     """Показать главное меню"""
+    from utils.bot_settings import get_setting, WELCOME_VIDEO_KEY
+    
     db = await get_db()
     user_repo = UserRepository(db)
     
     # Обновляем активность пользователя
     await user_repo.update_activity(callback.from_user.id)
     
+    # Получаем file_id видео
+    welcome_video_id = await get_setting(WELCOME_VIDEO_KEY) or config.WELCOME_VIDEO_FILE_ID
+    
+    # Если это уже видео с меню - просто редактируем caption
+    if callback.message.video and welcome_video_id:
+        try:
+            await callback.message.edit_caption(
+                caption=config.MAIN_MENU_TEXT,
+                reply_markup=get_main_menu_keyboard()
+            )
+            await callback.answer()
+            return
+        except Exception:
+            pass
+    
+    # Для всех остальных случаев - удаляем текущее сообщение и отправляем видео с меню
     try:
-        await callback.message.edit_text(
-            config.MAIN_MENU_TEXT,
+        await callback.message.delete()
+    except Exception:
+        pass
+    
+    # Отправляем видео с меню
+    if welcome_video_id:
+        try:
+            await callback.bot.send_video(
+                chat_id=callback.message.chat.id,
+                video=welcome_video_id,
+                caption=config.MAIN_MENU_TEXT,
+                reply_markup=get_main_menu_keyboard()
+            )
+        except Exception:
+            # Если не удалось отправить видео, отправляем только текст
+            await callback.bot.send_message(
+                chat_id=callback.message.chat.id,
+                text=config.MAIN_MENU_TEXT,
+                reply_markup=get_main_menu_keyboard()
+            )
+    else:
+        # Если видео не настроено, отправляем только текст
+        await callback.bot.send_message(
+            chat_id=callback.message.chat.id,
+            text=config.MAIN_MENU_TEXT,
             reply_markup=get_main_menu_keyboard()
         )
-    except Exception:
-        # Если не можем отредактировать
-        # Проверяем, это видео (приветствие) или фото (отзывы)
-        if callback.message.video:
-            # Если это приветственное видео - НЕ удаляем, просто отправляем новое меню
-            await callback.bot.send_message(
-                chat_id=callback.message.chat.id,
-                text=config.MAIN_MENU_TEXT,
-                reply_markup=get_main_menu_keyboard()
-            )
-        else:
-            # Если это фото или другое сообщение - удаляем и отправляем новое
-            try:
-                await callback.message.delete()
-            except Exception:
-                pass
-            
-            await callback.bot.send_message(
-                chat_id=callback.message.chat.id,
-                text=config.MAIN_MENU_TEXT,
-                reply_markup=get_main_menu_keyboard()
-            )
+    
     await callback.answer()
 
 
@@ -127,13 +149,42 @@ async def show_main_menu(callback: CallbackQuery):
 async def show_about_me(callback: CallbackQuery):
     """Показать информацию о преподавателе с кнопками соц. сетей"""
     
-    # Отправляем только текст без видео
     text = config.ABOUT_ME_TEXT + "\n\nПереходите в мои соц. сети:"
-    await callback.message.edit_text(
-        text,
-        reply_markup=get_about_me_keyboard(),
-        parse_mode="Markdown"
-    )
+    
+    try:
+        # Пробуем отредактировать сообщение
+        if callback.message.video:
+            # Если это видео с caption - не можем редактировать на текст, удаляем
+            await callback.message.delete()
+            await callback.bot.send_message(
+                chat_id=callback.message.chat.id,
+                text=text,
+                reply_markup=get_about_me_keyboard(),
+                parse_mode="Markdown",
+                disable_web_page_preview=True
+            )
+        else:
+            # Если текст - редактируем текст
+            await callback.message.edit_text(
+                text,
+                reply_markup=get_about_me_keyboard(),
+                parse_mode="Markdown",
+                disable_web_page_preview=True
+            )
+    except Exception:
+        # Если не можем отредактировать - удаляем и отправляем новое
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        
+        await callback.bot.send_message(
+            chat_id=callback.message.chat.id,
+            text=text,
+            reply_markup=get_about_me_keyboard(),
+            parse_mode="Markdown",
+            disable_web_page_preview=True
+        )
     
     await callback.answer()
 
@@ -142,19 +193,12 @@ async def show_about_me(callback: CallbackQuery):
 @router.callback_query(F.data == "guides_list")
 async def show_guides_list(callback: CallbackQuery):
     """Показать список всех гайдов"""
-    text = "💕 **Гайды**\n\nВыберите интересующий гайд:"
+    text = "💕 **Гайды**\n\nВыберите и скачайте гайд"
     
     try:
-        await callback.message.edit_text(
-            text,
-            reply_markup=get_guides_list_keyboard(),
-            parse_mode="Markdown"
-        )
-    except Exception:
-        # Если не можем отредактировать
-        # Проверяем, это видео или другое сообщение
+        # Если это видео - не можем отредактировать, удаляем
         if callback.message.video:
-            # Если видео - НЕ удаляем, просто отправляем новое
+            await callback.message.delete()
             await callback.bot.send_message(
                 chat_id=callback.message.chat.id,
                 text=text,
@@ -162,18 +206,25 @@ async def show_guides_list(callback: CallbackQuery):
                 parse_mode="Markdown"
             )
         else:
-            # Если это фото или другое - удаляем и отправляем новое
-            try:
-                await callback.message.delete()
-            except Exception:
-                pass
-            
-            await callback.bot.send_message(
-                chat_id=callback.message.chat.id,
-                text=text,
+            # Если текст - пробуем отредактировать
+            await callback.message.edit_text(
+                text,
                 reply_markup=get_guides_list_keyboard(),
                 parse_mode="Markdown"
             )
+    except Exception:
+        # Если не можем отредактировать - удаляем и отправляем новое
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        
+        await callback.bot.send_message(
+            chat_id=callback.message.chat.id,
+            text=text,
+            reply_markup=get_guides_list_keyboard(),
+            parse_mode="Markdown"
+        )
     await callback.answer()
 
 
@@ -247,7 +298,7 @@ async def download_guide(callback: CallbackQuery):
         # Отправляем файл с кнопками
         await callback.message.answer_document(
             document=file_id,
-            caption=f"{guide.get('emoji') or '💝'} {guide['name']}",
+            caption=f"{guide.get('emoji') or '💝'} {guide['name']}\n\nПриятного изучения!",
             reply_markup=keyboard
         )
         
@@ -259,38 +310,51 @@ async def download_guide(callback: CallbackQuery):
 
 @router.callback_query(F.data == "mini_course")
 async def show_mini_course(callback: CallbackQuery):
-    """Показать информацию о мини-курсе (по умолчанию - О курсе)"""
-    await show_mini_course_about(callback)
-
-
-@router.callback_query(F.data == "mini_course_about")
-async def show_mini_course_about(callback: CallbackQuery):
-    """Показать раздел 'О курсе'"""
+    """Показать информацию о мини-курсе - всё в одном сообщении"""
     mini_course = get_mini_course()
     
     if not mini_course or not mini_course.get('is_active', False):
         await callback.answer("Мини-курс пока недоступен", show_alert=True)
         return
     
-    # Формируем текст "О курсе"
+    # Формируем полный текст с всей информацией
     text = f"{mini_course['emoji']} {mini_course['title']}\n"
     text += f"{mini_course['subtitle']}\n\n"
     text += f"📅 Старт: {mini_course['start_date']}\n\n"
     text += f"{mini_course['description']}\n\n"
     
+    # Программа
+    text += "📋 **Программа:**\n\n"
+    for day_info in mini_course.get('program', []):
+        text += f"{day_info['emoji']} День {day_info['day']}. {day_info['title']}\n"
+        text += f"{day_info['description']}\n"
+        text += f"✨ {day_info['practice']}\n\n"
+    
     # Что получишь
-    text += "💎 В итоге ты получишь:\n\n"
+    text += "💎 **В итоге ты получишь:**\n\n"
     for benefit in mini_course.get('benefits', []):
         text += f"✔️ {benefit}\n"
     text += f"\n{mini_course.get('format', '')}"
     
     try:
-        await callback.message.edit_text(
-            text,
-            reply_markup=get_mini_course_keyboard()
-        )
+        # Если это видео - удаляем и отправляем новое сообщение
+        if callback.message.video:
+            await callback.message.delete()
+            await callback.bot.send_message(
+                chat_id=callback.message.chat.id,
+                text=text,
+                reply_markup=get_mini_course_keyboard(),
+                parse_mode="Markdown"
+            )
+        else:
+            # Если текст - редактируем
+            await callback.message.edit_text(
+                text,
+                reply_markup=get_mini_course_keyboard(),
+                parse_mode="Markdown"
+            )
     except Exception:
-        # Если не можем отредактировать (например, это видео)
+        # Если не можем отредактировать - удаляем и отправляем новое
         try:
             await callback.message.delete()
         except Exception:
@@ -299,75 +363,28 @@ async def show_mini_course_about(callback: CallbackQuery):
         await callback.bot.send_message(
             chat_id=callback.message.chat.id,
             text=text,
-            reply_markup=get_mini_course_keyboard()
+            reply_markup=get_mini_course_keyboard(),
+            parse_mode="Markdown"
         )
     
     await callback.answer()
+
+
+@router.callback_query(F.data == "mini_course_about")
+async def show_mini_course_about(callback: CallbackQuery):
+    """Показать раздел 'О курсе' - перенаправление на основной обработчик"""
+    await show_mini_course(callback)
 
 
 @router.callback_query(F.data == "mini_course_program")
 async def show_mini_course_program(callback: CallbackQuery):
-    """Показать раздел 'Программа'"""
-    mini_course = get_mini_course()
-    
-    if not mini_course or not mini_course.get('is_active', False):
-        await callback.answer("Мини-курс пока недоступен", show_alert=True)
-        return
-    
-    # Формируем текст "Программа"
-    text = f"🌟 Программа мини-курса\n\n"
-    
-    for day_info in mini_course.get('program', []):
-        text += f"{day_info['emoji']} День {day_info['day']}. {day_info['title']}\n"
-        text += f"{day_info['description']}\n"
-        text += f"✨ {day_info['practice']}\n\n"
-    
-    try:
-        await callback.message.edit_text(
-            text,
-            reply_markup=get_mini_course_keyboard()
-        )
-    except Exception:
-        pass
-    
-    await callback.answer()
+    """Показать раздел 'Программа' - перенаправление на основной обработчик"""
+    await show_mini_course(callback)
 
 
 @router.callback_query(F.data == "mini_course_price")
 async def show_mini_course_price(callback: CallbackQuery):
-    """Показать раздел 'Стоимость'"""
-    mini_course = get_mini_course()
-    
-    if not mini_course or not mini_course.get('is_active', False):
-        await callback.answer("Мини-курс пока недоступен", show_alert=True)
-        return
-    
-    # Формируем текст "Стоимость"
-    text = f"💰 Стоимость участия\n\n"
-    
-    for tariff in mini_course.get('tariffs', []):
-        text += f"{tariff['emoji']} {tariff['name']} - {tariff['price']} ₽\n\n"
-        text += "Что входит:\n"
-        for feature in tariff.get('features', []):
-            text += f"✔️ {feature}\n"
-        text += "\n"
-    
-    text += f"{mini_course.get('summary', '')}"
-    
-    try:
-        await callback.message.edit_text(
-            text,
-            reply_markup=get_mini_course_keyboard()
-        )
-    except Exception:
-        pass
-    
-    await callback.answer()
-
-
-@router.callback_query(F.data == "mini_course_register")
-async def show_mini_course_tariff_selection(callback: CallbackQuery):
-    """Показать выбор тарифа для записи на мини-курс"""
+    """Показать выбор тарифа для покупки"""
     mini_course = get_mini_course()
     
     if not mini_course or not mini_course.get('is_active', False):
@@ -380,13 +397,66 @@ async def show_mini_course_tariff_selection(callback: CallbackQuery):
         await callback.answer("Тарифы не найдены", show_alert=True)
         return
     
-    text = f"📝 Выберите тариф\n\n"
-    text += f"Мини-курс: {mini_course.get('title', 'Мини-курс')}\n"
-    text += f"{mini_course.get('subtitle', '')}\n\n"
+    # Формируем текст с описанием тарифов
+    text = f"💰 **Стоимость участия**\n\n"
+    
+    # Добавляем информацию о каждом тарифе
+    for tariff in tariffs:
+        emoji = tariff.get('emoji', '📚')
+        name = tariff.get('name', '')
+        price = tariff.get('price', 0)
+        
+        text += f"{emoji} **{name}** — {price} ₽\n\n"
+        text += "Что входит:\n"
+        for feature in tariff.get('features', []):
+            text += f"✔️ {feature}\n"
+        text += "\n"
+    
+    text += f"{mini_course.get('summary', '')}\n\n"
     text += "Выберите подходящий вам вариант обучения:"
     
-    await callback.message.edit_text(
-        text,
-        reply_markup=get_mini_course_tariff_keyboard()
-    )
+    # Создаем кнопки с тарифами
+    buttons = []
+    for tariff in tariffs:
+        emoji = tariff.get('emoji', '📚')
+        name = tariff.get('name', '')
+        price = tariff.get('price', 0)
+        tariff_id = tariff.get('id', '')
+        
+        buttons.append([InlineKeyboardButton(
+            text=f"{emoji} {name} — {price} ₽",
+            callback_data=f"tariff_mini_course_{tariff_id}"
+        )])
+    
+    # Кнопка "Назад" к основной информации
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=keyboard,
+            parse_mode="Markdown"
+        )
+    except Exception:
+        # Если не можем отредактировать
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        
+        await callback.bot.send_message(
+            chat_id=callback.message.chat.id,
+            text=text,
+            reply_markup=keyboard,
+            parse_mode="Markdown"
+        )
+    
     await callback.answer()
+
+
+@router.callback_query(F.data == "mini_course_register")
+async def show_mini_course_tariff_selection(callback: CallbackQuery):
+    """Показать выбор тарифа для записи на мини-курс - перенаправление"""
+    await show_mini_course_price(callback)

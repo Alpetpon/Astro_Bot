@@ -113,10 +113,34 @@ async def show_my_cabinet(callback: CallbackQuery):
         buttons.append([InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")])
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
         
-        await callback.message.edit_text(
-            text,
-            reply_markup=keyboard
-        )
+        try:
+            # Если это видео - удаляем и отправляем новое сообщение
+            if callback.message.video:
+                await callback.message.delete()
+                await callback.bot.send_message(
+                    chat_id=callback.message.chat.id,
+                    text=text,
+                    reply_markup=keyboard
+                )
+            else:
+                # Если текст - редактируем
+                await callback.message.edit_text(
+                    text,
+                    reply_markup=keyboard
+                )
+        except Exception as edit_error:
+            # Если не можем отредактировать - удаляем и отправляем новое
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+            
+            await callback.bot.send_message(
+                chat_id=callback.message.chat.id,
+                text=text,
+                reply_markup=keyboard
+            )
+        
         await callback.answer()
     
     except Exception as e:

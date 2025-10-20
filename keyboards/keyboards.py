@@ -115,14 +115,10 @@ def get_course_detail_keyboard(course_slug: str, show_navigation: bool = True) -
     """Клавиатура карточки курса"""
     buttons = []
     
-    # Навигация между разделами
-    if show_navigation:
-        buttons.append([
-            InlineKeyboardButton(text="📖 О курсе", callback_data=f"course_about_{course_slug}"),
-            InlineKeyboardButton(text="💰 Стоимость", callback_data=f"course_price_{course_slug}")
-        ])
-    
-    # Кнопка записи
+    # Кнопки: Стоимость и Записаться
+    buttons.append([
+        InlineKeyboardButton(text="💰 Стоимость", callback_data=f"course_price_{course_slug}")
+    ])
     buttons.append([
         InlineKeyboardButton(text="✅ Записаться", callback_data=f"course_register_{course_slug}")
     ])
@@ -168,12 +164,12 @@ def get_tariff_keyboard(course_slug: str, tariffs: List) -> InlineKeyboardMarkup
     return keyboard
 
 
-def get_payment_keyboard(payment_url: str, payment_id: int) -> InlineKeyboardMarkup:
+def get_payment_keyboard(payment_url: str, payment_id: int, back_callback: str = "back_navigation") -> InlineKeyboardMarkup:
     """Клавиатура оплаты"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💳 Оплатить", url=payment_url)],
         [InlineKeyboardButton(text="✅ Я оплатил(а)", callback_data=f"check_payment_{payment_id}")],
-        [InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")]
+        [InlineKeyboardButton(text="◀️ Назад", callback_data=back_callback)]
     ])
     return keyboard
 
@@ -287,15 +283,7 @@ def get_consultation_detail_keyboard(consultation_slug: str, show_navigation: bo
     
     buttons = []
     
-    # Навигация между разделами
-    if show_navigation:
-        buttons.append([
-            InlineKeyboardButton(text="ℹ️ Инфо", callback_data=f"consultation_info_{consultation_slug}"),
-            InlineKeyboardButton(text="📋 Что входит", callback_data=f"consultation_details_{consultation_slug}"),
-            InlineKeyboardButton(text="💰 Цены", callback_data=f"consultation_price_{consultation_slug}")
-        ])
-    
-    # Кнопка записи - теперь ведет в Telegram к астрологу
+    # Кнопка записи - ведет в Telegram к астрологу
     buttons.append([
         InlineKeyboardButton(
             text="✅ Записаться на консультацию", 
@@ -444,17 +432,10 @@ def get_mini_course_keyboard(show_navigation: bool = True) -> InlineKeyboardMark
     """Клавиатура для мини-курса"""
     buttons = []
     
-    # Навигация между разделами
-    if show_navigation:
-        buttons.append([
-            InlineKeyboardButton(text="📖 О курсе", callback_data="mini_course_about"),
-            InlineKeyboardButton(text="📋 Программа", callback_data="mini_course_program")
-        ])
-        buttons.append([
-            InlineKeyboardButton(text="💰 Стоимость", callback_data="mini_course_price")
-        ])
-    
-    # Кнопка записи
+    # Кнопки: Стоимость и Записаться
+    buttons.append([
+        InlineKeyboardButton(text="💰 Стоимость", callback_data="mini_course_price")
+    ])
     buttons.append([
         InlineKeyboardButton(text="✅ Записаться на мини-курс", callback_data="mini_course_register")
     ])

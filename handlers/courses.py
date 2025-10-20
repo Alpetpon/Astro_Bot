@@ -1,5 +1,5 @@
 from aiogram import Router, F
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
 
 from database import get_db, UserRepository
@@ -7,7 +7,6 @@ from data import get_active_courses, get_course_by_slug, get_tariff_by_id
 from keyboards import (
     get_courses_keyboard,
     get_course_detail_keyboard,
-    get_tariff_keyboard,
     get_back_keyboard
 )
 
@@ -33,15 +32,9 @@ async def show_courses_catalog(callback: CallbackQuery):
         markup = get_courses_keyboard(courses)
     
     try:
-        await callback.message.edit_text(
-            text,
-            reply_markup=markup,
-            parse_mode="Markdown"
-        )
-    except Exception:
-        # Если не можем отредактировать
+        # Если это видео - удаляем и отправляем новое сообщение
         if callback.message.video:
-            # Если видео - НЕ удаляем
+            await callback.message.delete()
             await callback.bot.send_message(
                 chat_id=callback.message.chat.id,
                 text=text,
@@ -49,26 +42,52 @@ async def show_courses_catalog(callback: CallbackQuery):
                 parse_mode="Markdown"
             )
         else:
-            # Если фото - удаляем и отправляем новое
-            try:
-                await callback.message.delete()
-            except Exception:
-                pass
-            
-            await callback.bot.send_message(
-                chat_id=callback.message.chat.id,
-                text=text,
+            # Если текст - редактируем
+            await callback.message.edit_text(
+                text,
                 reply_markup=markup,
                 parse_mode="Markdown"
             )
+    except Exception:
+        # Если не можем отредактировать - удаляем и отправляем новое
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        
+        await callback.bot.send_message(
+            chat_id=callback.message.chat.id,
+            text=text,
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
     
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("course_register_"))
 async def show_tariff_selection(callback: CallbackQuery):
-    """Показать выбор тарифа для записи"""
+    """Показать выбор тарифа для записи - перенаправление на стоимость"""
     course_slug = callback.data.replace("course_register_", "")
+    
+    # Создаем mock callback с нужным data
+    class CallbackDataWrapper:
+        def __init__(self, original_callback, new_data):
+            self._original = original_callback
+            self.data = new_data
+            
+        def __getattr__(self, name):
+            return getattr(self._original, name)
+    
+    # Перенаправляем на обработчик стоимости
+    wrapped_callback = CallbackDataWrapper(callback, f"course_price_{course_slug}")
+    await show_course_price(wrapped_callback)
+
+
+@router.callback_query(F.data.startswith("course_price_"))
+async def show_course_price(callback: CallbackQuery):
+    """Показать тарифы курса для выбора"""
+    course_slug = callback.data.replace("course_price_", "")
     
     # Получаем курс из JSON
     course = get_course_by_slug(course_slug)
@@ -84,21 +103,67 @@ async def show_tariff_selection(callback: CallbackQuery):
         await callback.answer("Тарифы не найдены", show_alert=True)
         return
     
-    text = f"📝 **Выберите тариф**\n\n"
-    text += f"Курс: {course['name']}\n\n"
+    # Формируем текст с описанием тарифов
+    emoji = course.get('emoji', '📚')
+    text = f"💰 **Стоимость курса «{course['name']}»**\n\n"
+    
+    # Добавляем информацию о каждом тарифе
+    for tariff in active_tariffs:
+        support_text = "✅ С сопровождением" if tariff.get('with_support') else "📚 Самостоятельно"
+        text += f"**{tariff['name']}** — {tariff['price']} ₽\n"
+        text += f"{support_text}\n"
+        if tariff.get('description'):
+            text += f"{tariff['description']}\n"
+        
+        text += "\nЧто входит:\n"
+        if tariff.get('features'):
+            for feature in tariff['features']:
+                text += f"✔️ {feature}\n"
+        
+        text += "\n"
+    
     text += "Выберите подходящий вам вариант обучения:"
     
-    await callback.message.edit_text(
-        text,
-        reply_markup=get_tariff_keyboard(course_slug, active_tariffs),
-        parse_mode="Markdown"
-    )
+    # Создаем кнопки с тарифами
+    buttons = []
+    for tariff in active_tariffs:
+        support_emoji = "👨‍🏫" if tariff.get('with_support') else "📚"
+        buttons.append([InlineKeyboardButton(
+            text=f"{support_emoji} {tariff['name']} — {tariff['price']} ₽",
+            callback_data=f"tariff_{course_slug}_{tariff['id']}"
+        )])
+    
+    # Кнопка "Назад"
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=keyboard,
+            parse_mode="Markdown"
+        )
+    except Exception:
+        # Если не можем отредактировать
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        
+        await callback.bot.send_message(
+            chat_id=callback.message.chat.id,
+            text=text,
+            reply_markup=keyboard,
+            parse_mode="Markdown"
+        )
+    
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("course_"))
 async def show_course_detail(callback: CallbackQuery):
-    """Показать детальную информацию о курсе"""
+    """Показать детальную информацию о курсе - вся информация в одном сообщении"""
     # Извлекаем slug курса
     parts = callback.data.split("_")
     
@@ -106,16 +171,7 @@ async def show_course_detail(callback: CallbackQuery):
         await callback.answer("Ошибка при загрузке курса", show_alert=True)
         return
     
-    # Проверяем, это навигация или просмотр курса
-    if parts[1] == "about":
-        course_slug = "_".join(parts[2:])
-        show_about = True
-    elif parts[1] == "price":
-        course_slug = "_".join(parts[2:])
-        show_about = False
-    else:
-        course_slug = "_".join(parts[1:])
-        show_about = True
+    course_slug = "_".join(parts[1:])
     
     # Получаем курс из JSON
     course = get_course_by_slug(course_slug)
@@ -124,38 +180,18 @@ async def show_course_detail(callback: CallbackQuery):
         await callback.answer("Курс не найден", show_alert=True)
         return
     
-    if show_about:
-        # Показываем информацию о курсе
-        emoji = course.get('emoji', '📚')
-        text = f"{emoji} **{course['name']}**\n\n"
-        text += f"{course.get('description', '')}\n\n"
-        
-        if course.get('duration'):
-            text += f"⏱ **Длительность:** {course['duration']}\n\n"
-        
-        if course.get('program'):
-            text += "📋 **Программа:**\n"
-            for module in course['program']:
-                text += f"• {module}\n"
-    else:
-        # Показываем тарифы
-        emoji = course.get('emoji', '📚')
-        text = f"💰 **Тарифы курса «{course['name']}»**\n\n"
-        
-        tariffs = course.get('tariffs', [])
-        active_tariffs = [t for t in tariffs if t.get('is_active', True)]
-        
-        for tariff in active_tariffs:
-            support_text = "✅ С сопровождением" if tariff.get('with_support') else "📚 Самостоятельно"
-            text += f"**{tariff['name']}** - {tariff['price']} ₽\n"
-            text += f"{support_text}\n"
-            text += f"{tariff.get('description', '')}\n"
-            
-            if tariff.get('features'):
-                for feature in tariff['features']:
-                    text += f"  • {feature}\n"
-            
-            text += "\n"
+    # Показываем полную информацию о курсе
+    emoji = course.get('emoji', '📚')
+    text = f"{emoji} **{course['name']}**\n\n"
+    text += f"{course.get('description', '')}\n\n"
+    
+    if course.get('duration'):
+        text += f"⏱ **Длительность:** {course['duration']}\n\n"
+    
+    if course.get('program'):
+        text += "📋 **Программа:**\n"
+        for module in course['program']:
+            text += f"• {module}\n"
     
     try:
         await callback.message.edit_text(
@@ -163,8 +199,18 @@ async def show_course_detail(callback: CallbackQuery):
             reply_markup=get_course_detail_keyboard(course_slug),
             parse_mode="Markdown"
         )
-    except TelegramBadRequest:
-        # Сообщение не изменилось - это нормально
-        pass
+    except Exception:
+        # Если не можем отредактировать (например, это документ, видео или фото)
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        
+        await callback.bot.send_message(
+            chat_id=callback.message.chat.id,
+            text=text,
+            reply_markup=get_course_detail_keyboard(course_slug),
+            parse_mode="Markdown"
+        )
     
     await callback.answer()

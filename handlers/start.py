@@ -35,18 +35,26 @@ async def cmd_start(message: Message):
     # Получаем file_id видео (сначала из БД, потом из config)
     welcome_video_id = await get_setting(WELCOME_VIDEO_KEY) or config.WELCOME_VIDEO_FILE_ID
     
-    # Отправляем приветственное видео, если оно настроено
+    # Отправляем приветственное видео с подписью и кнопками меню
     if welcome_video_id:
         try:
-            await message.answer_video(video=welcome_video_id)
+            await message.answer_video(
+                video=welcome_video_id,
+                caption=config.MAIN_MENU_TEXT,
+                reply_markup=get_main_menu_keyboard()
+            )
         except Exception:
-            pass
-    
-    # Отправляем главное меню отдельным сообщением
-    await message.answer(
-        config.MAIN_MENU_TEXT,
-        reply_markup=get_main_menu_keyboard()
-    )
+            # Если не удалось отправить видео, отправляем только текст
+            await message.answer(
+                config.MAIN_MENU_TEXT,
+                reply_markup=get_main_menu_keyboard()
+            )
+    else:
+        # Если видео не настроено, отправляем только текст
+        await message.answer(
+            config.MAIN_MENU_TEXT,
+            reply_markup=get_main_menu_keyboard()
+        )
 
 
 @router.callback_query(F.data == "start_back")
@@ -61,18 +69,26 @@ async def back_to_start(callback: CallbackQuery):
     except Exception:
         pass
     
-    # Отправляем приветственное видео, если оно настроено
+    # Отправляем приветственное видео с подписью и кнопками
     if welcome_video_id:
         try:
-            await callback.message.answer_video(video=welcome_video_id)
+            await callback.message.answer_video(
+                video=welcome_video_id,
+                caption=config.MAIN_MENU_TEXT,
+                reply_markup=get_main_menu_keyboard()
+            )
         except Exception:
-            pass
-    
-    # Отправляем главное меню отдельным сообщением
-    await callback.message.answer(
-        config.MAIN_MENU_TEXT,
-        reply_markup=get_main_menu_keyboard()
-    )
+            # Если не удалось отправить видео, отправляем только текст
+            await callback.message.answer(
+                config.MAIN_MENU_TEXT,
+                reply_markup=get_main_menu_keyboard()
+            )
+    else:
+        # Если видео не настроено, отправляем только текст
+        await callback.message.answer(
+            config.MAIN_MENU_TEXT,
+            reply_markup=get_main_menu_keyboard()
+        )
     
     await callback.answer()
 

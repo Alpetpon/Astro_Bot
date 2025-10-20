@@ -135,9 +135,12 @@ async def process_tariff_selection(callback: CallbackQuery):
         text += "Нажмите кнопку «Оплатить» для перехода на страницу оплаты.\n"
         text += f"После успешной оплаты доступ к {product_label.lower()}у откроется автоматически!"
         
+        # Определяем callback для кнопки "Назад"
+        back_callback = "mini_course_price" if product_type == 'mini_course' else f"course_{course_slug}"
+        
         await callback.message.edit_text(
             text,
-            reply_markup=get_payment_keyboard(payment_result['confirmation_url'], str(payment.id)),
+            reply_markup=get_payment_keyboard(payment_result['confirmation_url'], str(payment.id), back_callback),
             parse_mode="Markdown"
         )
         
