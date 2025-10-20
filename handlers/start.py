@@ -44,9 +44,8 @@ async def cmd_start(message: Message):
     
     # Отправляем главное меню отдельным сообщением
     await message.answer(
-        "🏠 **Главное меню**",
-        reply_markup=get_main_menu_keyboard(),
-        parse_mode="Markdown"
+        config.MAIN_MENU_TEXT,
+        reply_markup=get_main_menu_keyboard()
     )
 
 
@@ -71,9 +70,8 @@ async def back_to_start(callback: CallbackQuery):
     
     # Отправляем главное меню отдельным сообщением
     await callback.message.answer(
-        "🏠 **Главное меню**",
-        reply_markup=get_main_menu_keyboard(),
-        parse_mode="Markdown"
+        config.MAIN_MENU_TEXT,
+        reply_markup=get_main_menu_keyboard()
     )
     
     await callback.answer()

@@ -95,9 +95,8 @@ async def show_main_menu(callback: CallbackQuery):
     
     try:
         await callback.message.edit_text(
-            "🏠 **Главное меню**",
-            reply_markup=get_main_menu_keyboard(),
-            parse_mode="Markdown"
+            config.MAIN_MENU_TEXT,
+            reply_markup=get_main_menu_keyboard()
         )
     except Exception:
         # Если не можем отредактировать
@@ -106,9 +105,8 @@ async def show_main_menu(callback: CallbackQuery):
             # Если это приветственное видео - НЕ удаляем, просто отправляем новое меню
             await callback.bot.send_message(
                 chat_id=callback.message.chat.id,
-                text="🏠 **Главное меню**\n\nВыберите интересующий раздел:",
-                reply_markup=get_main_menu_keyboard(),
-                parse_mode="Markdown"
+                text=config.MAIN_MENU_TEXT,
+                reply_markup=get_main_menu_keyboard()
             )
         else:
             # Если это фото или другое сообщение - удаляем и отправляем новое
@@ -119,9 +117,8 @@ async def show_main_menu(callback: CallbackQuery):
             
             await callback.bot.send_message(
                 chat_id=callback.message.chat.id,
-                text="🏠 **Главное меню**\n\nВыберите интересующий раздел:",
-                reply_markup=get_main_menu_keyboard(),
-                parse_mode="Markdown"
+                text=config.MAIN_MENU_TEXT,
+                reply_markup=get_main_menu_keyboard()
             )
     await callback.answer()
 
