@@ -56,7 +56,7 @@ async def show_about_me(callback: CallbackQuery):
     """Показать информацию о преподавателе с кнопками соц. сетей"""
     
     # Отправляем только текст без видео
-    text = config.ABOUT_ME_TEXT + "\n\n📱 **Мои соц. сети:**"
+    text = config.ABOUT_ME_TEXT + "\n\nПереходите в мои соц. сети:"
     await callback.message.edit_text(
         text,
         reply_markup=get_about_me_keyboard(),
@@ -65,24 +65,6 @@ async def show_about_me(callback: CallbackQuery):
     
     await callback.answer()
 
-
-@router.callback_query(F.data == "about_me_2")
-async def show_about_me_2(callback: CallbackQuery):
-    """Показать информацию о преподавателе с текстовыми ссылками на соц. сети"""
-    text = config.ABOUT_ME_TEXT + f"\n\n📱 **Мои соц. сети:**\n\n"
-    text += f"[Telegram канал]({config.TELEGRAM_CHANNEL_URL})\n"
-    text += f"[YouTube]({config.YOUTUBE_URL})\n"
-    text += f"[Instagram]({config.INSTAGRAM_URL})\n"
-    text += f"[Поддержать (Sponsr)]({config.VK_URL})\n"
-    text += f"[Дзен]({config.DZEN_URL})"
-    
-    await callback.message.edit_text(
-        text,
-        reply_markup=get_back_keyboard("main_menu", "◀️ Назад в меню"),
-        parse_mode="Markdown",
-        disable_web_page_preview=True
-    )
-    await callback.answer()
 
 
 @router.callback_query(F.data == "guides_list")

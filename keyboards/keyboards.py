@@ -5,7 +5,7 @@ from typing import List, Optional
 def get_start_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура приветствия"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="👤 Обо мне", callback_data="about_me")],
+        [InlineKeyboardButton(text="👤 Мой путь", callback_data="about_me")],
         [InlineKeyboardButton(text="✨ Перейти в меню", callback_data="main_menu")]
     ])
     return keyboard
@@ -14,7 +14,7 @@ def get_start_keyboard() -> InlineKeyboardMarkup:
 def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     """Главное меню"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="👤 Обо мне", callback_data="about_me")],
+        [InlineKeyboardButton(text="👤 Мой путь", callback_data="about_me")],
         [InlineKeyboardButton(text="💕 Гайды", callback_data="guides_list")],
         [InlineKeyboardButton(text="🌌 Мини курс", callback_data="mini_course")],
         [InlineKeyboardButton(text="📚 Курсы", callback_data="courses")],
@@ -34,14 +34,14 @@ def get_back_keyboard(callback: str = "main_menu", text: str = "◀️ Наза�
 
 
 def get_about_me_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура для раздела Обо мне с соц. сетями"""
+    """Клавиатура для раздела Мой путь с соц. сетями"""
     from config import config
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Telegram канал", url=config.TELEGRAM_CHANNEL_URL)],
         [InlineKeyboardButton(text="YouTube", url=config.YOUTUBE_URL)],
         [InlineKeyboardButton(text="Instagram", url=config.INSTAGRAM_URL)],
-        [InlineKeyboardButton(text="Поддержать (Sponsr)", url=config.VK_URL)],
+        [InlineKeyboardButton(text="Читать на Sponsr", url=config.VK_URL)],
         [InlineKeyboardButton(text="Дзен", url=config.DZEN_URL)],
         [InlineKeyboardButton(text="◀️ Назад в меню", callback_data="main_menu")]
     ])
