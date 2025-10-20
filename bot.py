@@ -3,6 +3,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import config
 from database import mongodb
@@ -20,6 +21,7 @@ from handlers import (
     admin_video_router,
     admin_mini_course_router
 )
+from middlewares import NavigationMiddleware
 from scheduler.payment_checker import start_payment_checker, stop_payment_checker
 
 
@@ -49,12 +51,17 @@ async def main():
     mini_course_status = "loaded" if mini_course else "not found"
     logger.info(f"Data loaded: {len(courses)} courses, {len(consultations)} consultations, {len(guides)} guides, mini-course: {mini_course_status} (all from JSON)")
     
-    # Создание бота и диспетчера
+    # Создание бота и диспетчера с хранилищем для FSM
     bot = Bot(
         token=config.BOT_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
-    dp = Dispatcher()
+    storage = MemoryStorage()
+    dp = Dispatcher(storage=storage)
+    
+    # Регистрация middleware для навигации
+    dp.callback_query.middleware(NavigationMiddleware())
+    logger.info("Navigation middleware registered")
     
     # Регистрация роутеров
     dp.include_router(start_router)

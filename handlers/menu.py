@@ -1,5 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.context import FSMContext
 
 from config import config
 from database import get_db, UserRepository
@@ -7,6 +8,81 @@ from data import get_active_guides, get_guide_by_id, get_mini_course, get_mini_c
 from keyboards import get_main_menu_keyboard, get_back_keyboard, get_guides_list_keyboard, get_guide_keyboard, get_about_me_keyboard, get_mini_course_keyboard, get_mini_course_tariff_keyboard
 
 router = Router()
+
+
+@router.callback_query(F.data == "back_navigation")
+async def navigate_back(callback: CallbackQuery, state: FSMContext):
+    """Универсальный обработчик кнопки 'Назад' с использованием истории навигации"""
+    # Получаем целевой callback из FSM
+    data = await state.get_data()
+    target_callback = data.get('back_target', 'main_menu')
+    
+    # Меняем callback.data на целевой и обрабатываем
+    original_data = callback.data
+    callback.data = target_callback
+    
+    # Определяем какой handler вызвать на основе callback_data
+    # Импортируем handlers из других модулей при необходимости
+    from . import courses, consultations, reviews, cabinet
+    
+    # Маппинг callback_data на handlers
+    handlers_map = {
+        'main_menu': show_main_menu,
+        'guides_list': show_guides_list,
+        'about_me': show_about_me,
+        'mini_course': show_mini_course,
+        'courses': courses.show_courses_list,
+        'consultations': consultations.show_consultations_list,
+        'reviews': reviews.show_reviews_list,
+        'my_cabinet': cabinet.show_my_cabinet,
+        'my_courses': cabinet.show_my_courses,
+    }
+    
+    # Если это специфичный callback (например, course_xxx), обрабатываем отдельно
+    if target_callback.startswith('course_about_'):
+        await courses.show_course_about(callback)
+    elif target_callback.startswith('course_price_'):
+        await courses.show_course_price(callback)
+    elif target_callback.startswith('course_register_'):
+        await courses.show_course_register(callback)
+    elif target_callback.startswith('course_'):
+        await courses.show_course_details(callback)
+    elif target_callback.startswith('guide_'):
+        await show_guide(callback)
+    elif target_callback.startswith('consultation_info_'):
+        await consultations.show_consultation_info(callback)
+    elif target_callback.startswith('consultation_details_'):
+        await consultations.show_consultation_details(callback)
+    elif target_callback.startswith('consultation_price_'):
+        await consultations.show_consultation_price(callback)
+    elif target_callback.startswith('consultation_'):
+        await consultations.show_consultation_detail(callback)
+    elif target_callback.startswith('mini_course_'):
+        # Обрабатываем подразделы мини-курса
+        if target_callback == 'mini_course_about':
+            await show_mini_course_about(callback)
+        elif target_callback == 'mini_course_program':
+            await show_mini_course_program(callback)
+        elif target_callback == 'mini_course_price':
+            await show_mini_course_price(callback)
+        elif target_callback == 'mini_course_register':
+            await show_mini_course_tariff_selection(callback)
+        else:
+            await show_mini_course(callback)
+    elif target_callback.startswith('my_course_'):
+        await cabinet.show_my_course(callback)
+    elif target_callback.startswith('reviews_page_'):
+        await reviews.show_reviews_page(callback)
+    elif target_callback in handlers_map:
+        # Вызываем соответствующий handler
+        handler = handlers_map[target_callback]
+        await handler(callback)
+    else:
+        # По умолчанию - главное меню
+        await show_main_menu(callback)
+    
+    # Восстанавливаем исходный callback.data (хотя это не обязательно)
+    callback.data = original_data
 
 
 @router.callback_query(F.data == "main_menu")

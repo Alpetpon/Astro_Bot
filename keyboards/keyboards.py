@@ -43,7 +43,7 @@ def get_about_me_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Instagram", url=config.INSTAGRAM_URL)],
         [InlineKeyboardButton(text="Читать на Sponsr", url=config.VK_URL)],
         [InlineKeyboardButton(text="Дзен", url=config.DZEN_URL)],
-        [InlineKeyboardButton(text="◀️ Назад в меню", callback_data="main_menu")]
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")]
     ])
     return keyboard
 
@@ -65,7 +65,7 @@ def get_guides_list_keyboard() -> InlineKeyboardMarkup:
             callback_data=f"guide_{guide['id']}"
         )])
     
-    buttons.append([InlineKeyboardButton(text="◀️ Назад в меню", callback_data="main_menu")])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard
@@ -82,7 +82,7 @@ def get_guide_keyboard(guide_id: str, has_file: bool = False, related_course_slu
         buttons.append([InlineKeyboardButton(text="📥 Скачать PDF", callback_data=f"download_guide_{guide_id}")])
     
     buttons.append([
-        InlineKeyboardButton(text="◀️ К гайдам", callback_data="guides_list"),
+        InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation"),
         InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")
     ])
     
@@ -105,7 +105,7 @@ def get_courses_keyboard(courses: List) -> InlineKeyboardMarkup:
             callback_data=f"course_{slug}"
         )])
     
-    buttons.append([InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard
@@ -129,7 +129,7 @@ def get_course_detail_keyboard(course_slug: str, show_navigation: bool = True) -
     
     # Навигация назад
     buttons.append([
-        InlineKeyboardButton(text="◀️ К курсам", callback_data="courses"),
+        InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation"),
         InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")
     ])
     
@@ -161,7 +161,7 @@ def get_tariff_keyboard(course_slug: str, tariffs: List) -> InlineKeyboardMarkup
         )])
     
     buttons.append([
-        InlineKeyboardButton(text="◀️ Назад к курсу", callback_data=f"course_{course_slug}")
+        InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")
     ])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -173,7 +173,7 @@ def get_payment_keyboard(payment_url: str, payment_id: int) -> InlineKeyboardMar
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💳 Оплатить", url=payment_url)],
         [InlineKeyboardButton(text="✅ Я оплатил(а)", callback_data=f"check_payment_{payment_id}")],
-        [InlineKeyboardButton(text="◀️ Назад", callback_data="courses")]
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")]
     ])
     return keyboard
 
@@ -185,7 +185,7 @@ def get_my_cabinet_keyboard(has_courses: bool = False) -> InlineKeyboardMarkup:
     if has_courses:
         buttons.append([InlineKeyboardButton(text="📚 Мои курсы", callback_data="my_courses")])
     
-    buttons.append([InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard
@@ -201,7 +201,7 @@ def get_my_courses_keyboard(user_courses: List) -> InlineKeyboardMarkup:
             callback_data=f"my_course_{course_id}"
         )])
     
-    buttons.append([InlineKeyboardButton(text="◀️ Мой кабинет", callback_data="my_cabinet")])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard
@@ -227,7 +227,7 @@ def get_course_progress_keyboard(course_id: int, lessons: List) -> InlineKeyboar
             callback_data=f"lesson_{lesson['id']}"
         )])
     
-    buttons.append([InlineKeyboardButton(text="◀️ Мои курсы", callback_data="my_courses")])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard
@@ -248,7 +248,7 @@ def get_lesson_keyboard(lesson_id: int, course_id: int, has_materials: bool = Fa
     ])
     
     buttons.append([
-        InlineKeyboardButton(text="◀️ К курсу", callback_data=f"my_course_{course_id}")
+        InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")
     ])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -275,7 +275,7 @@ def get_consultations_keyboard(consultations: List) -> InlineKeyboardMarkup:
             callback_data=f"consultation_{slug}"
         )])
     
-    buttons.append([InlineKeyboardButton(text="◀️ В меню", callback_data="main_menu")])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard
@@ -305,7 +305,7 @@ def get_consultation_detail_keyboard(consultation_slug: str, show_navigation: bo
     
     # Навигация назад
     buttons.append([
-        InlineKeyboardButton(text="◀️ К консультациям", callback_data="consultations"),
+        InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation"),
         InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")
     ])
     
@@ -433,8 +433,8 @@ def get_reviews_navigation_keyboard(page: int = 0, total_pages: int = 1) -> Inli
     # Кнопка перехода к курсам
     buttons.append([InlineKeyboardButton(text="📚 Курсы", callback_data="courses")])
     
-    # Кнопка "Назад в меню" всегда присутствует
-    buttons.append([InlineKeyboardButton(text="🏠 Назад в меню", callback_data="main_menu")])
+    # Кнопка "Назад"
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard
@@ -461,7 +461,7 @@ def get_mini_course_keyboard(show_navigation: bool = True) -> InlineKeyboardMark
     
     # Назад
     buttons.append([
-        InlineKeyboardButton(text="◀️ Назад в меню", callback_data="main_menu")
+        InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")
     ])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -473,7 +473,7 @@ def get_mini_course_tariff_keyboard() -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📚 Самостоятельное изучение — 5000 ₽", callback_data="tariff_mini_course_mini-solo")],
         [InlineKeyboardButton(text="👨‍🏫 С сопровождением — 10000 ₽", callback_data="tariff_mini_course_mini-support")],
-        [InlineKeyboardButton(text="◀️ Назад", callback_data="mini_course")]
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")]
     ])
     return keyboard
 
