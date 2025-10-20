@@ -62,7 +62,7 @@ class Config:
     INSTAGRAM_URL = 'https://www.instagram.com/ohuevshaya_i?igsh=aTF0YnltanIzYm5z'
     YOUTUBE_URL = 'https://youtube.com/@katrin_f?si=y3piuaqhKwAX10OR'
     VK_URL = 'https://sponsr.ru/katrin_fucco'
-    TELEGRAM_CHANNEL_URL = 'https://t.me/katrin_fucco'
+    TELEGRAM_CHANNEL_URL = 'https://t.me/astrotaroKatrinF'
     DZEN_URL = 'https://dzen.ru/katrin_fucco'
     
     # Видео (File ID можно указать здесь или загрузить через админ-панель)
