@@ -17,9 +17,18 @@ async def navigate_back(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     target_callback = data.get('back_target', 'main_menu')
     
-    # Меняем callback.data на целевой и обрабатываем
-    original_data = callback.data
-    callback.data = target_callback
+    # Создаем временный mock объект с нужным callback_data
+    # Вместо изменения frozen объекта, создаем wrapper
+    class CallbackDataWrapper:
+        def __init__(self, original_callback, new_data):
+            self._original = original_callback
+            self.data = new_data
+            
+        def __getattr__(self, name):
+            return getattr(self._original, name)
+    
+    # Оборачиваем callback с новым data
+    wrapped_callback = CallbackDataWrapper(callback, target_callback)
     
     # Определяем какой handler вызвать на основе callback_data
     # Импортируем handlers из других модулей при необходимости
@@ -40,49 +49,46 @@ async def navigate_back(callback: CallbackQuery, state: FSMContext):
     
     # Если это специфичный callback (например, course_xxx), обрабатываем отдельно
     if target_callback.startswith('course_about_'):
-        await courses.show_course_about(callback)
+        await courses.show_course_about(wrapped_callback)
     elif target_callback.startswith('course_price_'):
-        await courses.show_course_price(callback)
+        await courses.show_course_price(wrapped_callback)
     elif target_callback.startswith('course_register_'):
-        await courses.show_course_register(callback)
+        await courses.show_course_register(wrapped_callback)
     elif target_callback.startswith('course_'):
-        await courses.show_course_details(callback)
+        await courses.show_course_details(wrapped_callback)
     elif target_callback.startswith('guide_'):
-        await show_guide(callback)
+        await show_guide(wrapped_callback)
     elif target_callback.startswith('consultation_info_'):
-        await consultations.show_consultation_info(callback)
+        await consultations.show_consultation_info(wrapped_callback)
     elif target_callback.startswith('consultation_details_'):
-        await consultations.show_consultation_details(callback)
+        await consultations.show_consultation_details(wrapped_callback)
     elif target_callback.startswith('consultation_price_'):
-        await consultations.show_consultation_price(callback)
+        await consultations.show_consultation_price(wrapped_callback)
     elif target_callback.startswith('consultation_'):
-        await consultations.show_consultation_detail(callback)
+        await consultations.show_consultation_detail(wrapped_callback)
     elif target_callback.startswith('mini_course_'):
         # Обрабатываем подразделы мини-курса
         if target_callback == 'mini_course_about':
-            await show_mini_course_about(callback)
+            await show_mini_course_about(wrapped_callback)
         elif target_callback == 'mini_course_program':
-            await show_mini_course_program(callback)
+            await show_mini_course_program(wrapped_callback)
         elif target_callback == 'mini_course_price':
-            await show_mini_course_price(callback)
+            await show_mini_course_price(wrapped_callback)
         elif target_callback == 'mini_course_register':
-            await show_mini_course_tariff_selection(callback)
+            await show_mini_course_tariff_selection(wrapped_callback)
         else:
-            await show_mini_course(callback)
+            await show_mini_course(wrapped_callback)
     elif target_callback.startswith('my_course_'):
-        await cabinet.show_my_course(callback)
+        await cabinet.show_my_course(wrapped_callback)
     elif target_callback.startswith('reviews_page_'):
-        await reviews.show_reviews_page(callback)
+        await reviews.show_reviews_page(wrapped_callback)
     elif target_callback in handlers_map:
         # Вызываем соответствующий handler
         handler = handlers_map[target_callback]
-        await handler(callback)
+        await handler(wrapped_callback)
     else:
         # По умолчанию - главное меню
-        await show_main_menu(callback)
-    
-    # Восстанавливаем исходный callback.data (хотя это не обязательно)
-    callback.data = original_data
+        await show_main_menu(wrapped_callback)
 
 
 @router.callback_query(F.data == "main_menu")
