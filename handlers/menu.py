@@ -148,12 +148,6 @@ async def download_guide(callback: CallbackQuery):
         return
     
     try:
-        # Отправляем файл
-        await callback.message.answer_document(
-            document=file_id,
-            caption=f"📥 {guide.get('emoji') or '💝'} {guide['name']}\n\n🎁 Приятного изучения!"
-        )
-        
         # Создаем клавиатуру с кнопками
         buttons = []
         
@@ -172,9 +166,10 @@ async def download_guide(callback: CallbackQuery):
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
         
-        # Отправляем сообщение с кнопками
-        await callback.message.answer(
-            "Выберите действие:",
+        # Отправляем файл с кнопками
+        await callback.message.answer_document(
+            document=file_id,
+            caption=f"📥 {guide.get('emoji') or '💝'} {guide['name']}\n\n🎁 Приятного изучения!",
             reply_markup=keyboard
         )
         

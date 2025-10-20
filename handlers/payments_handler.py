@@ -313,13 +313,6 @@ async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
             )
             return
         
-        # Отправляем файл гайда
-        await callback.message.answer_document(
-            document=file_id,
-            caption=f"✅ **Оплата успешна!**\n\n{guide.get('emoji') or '💝'} Ваш {guide['name']} готов!\n\nЖелаем вам успехов в изучении! 🌟",
-            parse_mode="Markdown"
-        )
-        
         # Создаем клавиатуру с кнопками
         buttons = []
         
@@ -338,9 +331,11 @@ async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
         
-        # Отправляем сообщение с кнопками
-        await callback.message.answer(
-            "Приятного изучения! 📖\n\nВыберите действие:",
+        # Отправляем файл гайда с кнопками
+        await callback.message.answer_document(
+            document=file_id,
+            caption=f"✅ **Оплата успешна!**\n\n{guide.get('emoji') or '💝'} Ваш {guide['name']} готов!\n\nЖелаем вам успехов в изучении! 🌟",
+            parse_mode="Markdown",
             reply_markup=keyboard
         )
         
