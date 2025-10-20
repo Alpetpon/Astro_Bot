@@ -323,9 +323,9 @@ async def send_guide_to_user(callback: CallbackQuery, payment: Payment):
                 callback_data=f"course_{guide['related_course_slug']}"
             )])
         
-        # Кнопки навигации
+        # Кнопки навигации - используем back_navigation для возврата
         buttons.append([
-            InlineKeyboardButton(text="◀️ К гайдам", callback_data="guides_list"),
+            InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation"),
             InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")
         ])
         

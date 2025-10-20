@@ -239,7 +239,7 @@ async def notify_guide_payment(bot: Bot, user: dict, payment: dict):
             )])
         
         buttons.append([
-            InlineKeyboardButton(text="◀️ К гайдам", callback_data="guides_list"),
+            InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation"),
             InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")
         ])
         
