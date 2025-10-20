@@ -38,10 +38,10 @@ def get_about_me_keyboard() -> InlineKeyboardMarkup:
     from config import config
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Instagram", url=config.INSTAGRAM_URL)],
-        [InlineKeyboardButton(text="YouTube", url=config.YOUTUBE_URL)],
-        [InlineKeyboardButton(text="💰 Поддержать (Sponsr)", url=config.VK_URL)],
         [InlineKeyboardButton(text="Telegram канал", url=config.TELEGRAM_CHANNEL_URL)],
+        [InlineKeyboardButton(text="YouTube", url=config.YOUTUBE_URL)],
+        [InlineKeyboardButton(text="Instagram", url=config.INSTAGRAM_URL)],
+        [InlineKeyboardButton(text="💰 Поддержать (Sponsr)", url=config.VK_URL)],
         [InlineKeyboardButton(text="Дзен", url=config.DZEN_URL)],
         [InlineKeyboardButton(text="◀️ Назад в меню", callback_data="main_menu")]
     ])
