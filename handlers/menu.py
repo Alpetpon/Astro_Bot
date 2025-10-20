@@ -72,7 +72,7 @@ async def show_about_me_2(callback: CallbackQuery):
     text = config.ABOUT_ME_TEXT + f"\n\n📱 **Мои соц. сети:**\n\n"
     text += f"📱 [Instagram]({config.INSTAGRAM_URL})\n"
     text += f"🎥 [YouTube]({config.YOUTUBE_URL})\n"
-    text += f"💙 [ВКонтакте]({config.VK_URL})\n"
+    text += f"💰 [Поддержать (Sponsr)]({config.VK_URL})\n"
     text += f"✈️ [Telegram канал]({config.TELEGRAM_CHANNEL_URL})\n"
     text += f"📰 [Дзен]({config.DZEN_URL})"
     

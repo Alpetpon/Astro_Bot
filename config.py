@@ -59,11 +59,11 @@ class Config:
     CONSULTATION_TELEGRAM = 'Katrin_fucco'  # Username без @
     
     # Соц. сети (можно изменить прямо в коде)
-    INSTAGRAM_URL = 'https://instagram.com/your_profile'
-    YOUTUBE_URL = 'https://youtube.com/@your_channel'
-    VK_URL = 'https://vk.com/your_profile'
-    TELEGRAM_CHANNEL_URL = 'https://t.me/your_channel'
-    DZEN_URL = 'https://dzen.ru/your_profile'
+    INSTAGRAM_URL = 'https://www.instagram.com/ohuevshaya_i?igsh=aTF0YnltanIzYm5z'
+    YOUTUBE_URL = 'https://youtube.com/@katrin_f?si=y3piuaqhKwAX10OR'
+    VK_URL = 'https://sponsr.ru/katrin_fucco'
+    TELEGRAM_CHANNEL_URL = 'https://t.me/katrin_fucco'
+    DZEN_URL = 'https://dzen.ru/katrin_fucco'
     
     # Видео (File ID можно указать здесь или загрузить через админ-панель)
     # Значения из админ-панели имеют приоритет над этими
