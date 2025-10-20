@@ -20,7 +20,7 @@ async def show_main_menu(callback: CallbackQuery):
     
     try:
         await callback.message.edit_text(
-            "🏠 **Главное меню**\n\nВыберите интересующий раздел:",
+            "🏠 **Главное меню**",
             reply_markup=get_main_menu_keyboard(),
             parse_mode="Markdown"
         )
