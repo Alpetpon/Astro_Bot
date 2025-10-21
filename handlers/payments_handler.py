@@ -224,7 +224,9 @@ async def check_payment_status(callback: CallbackQuery):
                     else:
                         await callback.answer("✅ Оплата подтверждена!", show_alert=True)
                 else:
-                    # Курс или мини-курс оплачен
+                    # Курс или мини-курс оплачен - отправляем ссылку на учебный бот
+                    from config import config as bot_config
+                    
                     if payment.course_slug == "mini_course":
                         # Мини-курс
                         mini_course = get_mini_course()
@@ -237,11 +239,17 @@ async def check_payment_status(callback: CallbackQuery):
                             if tariff and tariff.get('with_support'):
                                 success_text += "👨‍🏫 В ближайшее время с вами свяжется куратор.\n\n"
                             
-                            success_text += "📚 Материалы курса доступны в вашем кабинете!"
+                            success_text += "🎓 Для изучения материалов перейдите в учебный бот:\n"
+                            success_text += f"@{bot_config.LEARNING_BOT_USERNAME}\n\n"
+                            success_text += "Там вы найдете все модули, уроки и материалы курса!"
                             
-                            # Создаем кнопку "Мои курсы"
+                            # Создаем кнопку для перехода в учебный бот
                             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                                [InlineKeyboardButton(text="📚 Мои курсы", callback_data="my_courses")]
+                                [InlineKeyboardButton(
+                                    text="🎓 Перейти к обучению",
+                                    url=f"https://t.me/{bot_config.LEARNING_BOT_USERNAME}"
+                                )],
+                                [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")]
                             ])
                             
                             await callback.message.edit_text(
@@ -264,11 +272,17 @@ async def check_payment_status(callback: CallbackQuery):
                             if tariff and tariff.get('with_support'):
                                 success_text += "👨‍🏫 В ближайшее время с вами свяжется куратор.\n\n"
                             
-                            success_text += "📚 Материалы курса доступны в вашем кабинете!"
+                            success_text += "🎓 Для изучения материалов перейдите в учебный бот:\n"
+                            success_text += f"@{bot_config.LEARNING_BOT_USERNAME}\n\n"
+                            success_text += "Там вы найдете все модули, уроки и материалы курса!"
                             
-                            # Создаем кнопку "Мои курсы"
+                            # Создаем кнопку для перехода в учебный бот
                             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                                [InlineKeyboardButton(text="📚 Мои курсы", callback_data="my_courses")]
+                                [InlineKeyboardButton(
+                                    text="🎓 Перейти к обучению",
+                                    url=f"https://t.me/{bot_config.LEARNING_BOT_USERNAME}"
+                                )],
+                                [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")]
                             ])
                             
                             await callback.message.edit_text(

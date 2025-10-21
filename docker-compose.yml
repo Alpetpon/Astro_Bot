@@ -41,23 +41,43 @@ services:
     networks:
       - astro_network
 
-  # Бот (раскомментируйте когда будете готовы запустить бота в Docker)
-  # bot:
-  #   build: .
-  #   container_name: astro_bot
-  #   restart: unless-stopped
-  #   env_file:
-  #     - .env
-  #   environment:
-  #     MONGODB_URL: mongodb://admin:admin_password_change_me@mongodb:27017/astro_bot?authSource=admin
-  #     MONGODB_DB_NAME: astro_bot
-  #   depends_on:
-  #     mongodb:
-  #       condition: service_healthy
-  #   networks:
-  #     - astro_network
-  #   volumes:
-  #     - ./data:/app/data
+  # Основной бот (воронка продаж)
+  sales_bot:
+    build: .
+    container_name: astro_sales_bot
+    restart: unless-stopped
+    command: python bot.py
+    env_file:
+      - .env
+    environment:
+      MONGODB_URL: mongodb://admin:admin_password_change_me@mongodb:27017/astro_bot?authSource=admin
+      MONGODB_DB_NAME: astro_bot
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - astro_network
+    volumes:
+      - ./data:/app/data
+
+  # Учебный бот (для обучения)
+  learning_bot:
+    build: .
+    container_name: astro_learning_bot
+    restart: unless-stopped
+    command: python learning_bot.py
+    env_file:
+      - .env
+    environment:
+      MONGODB_URL: mongodb://admin:admin_password_change_me@mongodb:27017/astro_bot?authSource=admin
+      MONGODB_DB_NAME: astro_bot
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - astro_network
+    volumes:
+      - ./data:/app/data
 
 volumes:
   mongodb_data:

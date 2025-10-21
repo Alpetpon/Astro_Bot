@@ -10,8 +10,12 @@ logger = logging.getLogger(__name__)
 class Config:
     """Конфигурация бота"""
     
-    # Telegram
+    # Telegram - основной бот (воронка продаж)
     BOT_TOKEN = os.getenv('BOT_TOKEN')
+    
+    # Telegram - учебный бот (обучение)
+    LEARNING_BOT_TOKEN = os.getenv('LEARNING_BOT_TOKEN')
+    LEARNING_BOT_USERNAME = os.getenv('LEARNING_BOT_USERNAME', 'your_learning_bot')  # Username без @
     
     # Поддержка нескольких администраторов
     # Можно указать один ID или несколько через запятую
