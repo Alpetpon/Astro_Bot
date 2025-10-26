@@ -132,8 +132,13 @@ async def process_tariff_selection(callback: CallbackQuery):
         text += f"**Тариф:** {tariff['name']}\n"
         text += f"**Формат:** {support_text}\n"
         text += f"**Стоимость:** {tariff['price']} ₽\n\n"
-        text += "Нажмите кнопку «Оплатить» для перехода на страницу оплаты.\n"
-        text += f"После успешной оплаты доступ к {product_label.lower()}у откроется автоматически!"
+        text += "• Нажмите кнопку «Оплатить» для перехода на страницу оплаты.\n"
+        
+        # Добавляем информацию для тарифов без обратной связи
+        if not tariff.get('with_support'):
+            text += "• При покупке курса без обратной связи изучение можно начать сразу после покупки.\n"
+        
+        text += f"• После успешной оплаты доступ к {product_label.lower()}у откроется автоматически!"
         
         # Определяем callback для кнопки "Назад"
         back_callback = "mini_course_price" if product_type == 'mini_course' else f"course_{course_slug}"

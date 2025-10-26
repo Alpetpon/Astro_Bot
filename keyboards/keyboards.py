@@ -16,10 +16,12 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👤 Мой путь", callback_data="about_me")],
         [InlineKeyboardButton(text="💕 Гайды", callback_data="guides_list")],
-        [InlineKeyboardButton(text="🌌 Мини курс", callback_data="mini_course")],
+        [InlineKeyboardButton(text="🌌 7 дней, чтобы понять свой код", callback_data="mini_course")],
         [InlineKeyboardButton(text="📚 Курсы", callback_data="courses")],
         [InlineKeyboardButton(text="⭐️ Отзывы", callback_data="reviews")],
         [InlineKeyboardButton(text="🔮 Консультации", callback_data="consultations")],
+        [InlineKeyboardButton(text="💫 Telegram канал", callback_data="subscription_channel")],
+        [InlineKeyboardButton(text="🎥 Вебинар", callback_data="webinar")],
         [InlineKeyboardButton(text="🏠 Мой кабинет", callback_data="my_cabinet")]
     ])
     return keyboard
@@ -352,8 +354,19 @@ def get_bot_management_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🔮 Управление консультациями", callback_data="admin_consultations")],
         [InlineKeyboardButton(text="💕 Управление гайдами", callback_data="admin_guides")],
         [InlineKeyboardButton(text="⭐️ Управление отзывами", callback_data="admin_reviews")],
+        [InlineKeyboardButton(text="💫 Управление подписками", callback_data="admin_subscriptions")],
         [InlineKeyboardButton(text="🎥 Настройки видео", callback_data="admin_video_settings")],
         [InlineKeyboardButton(text="◀️ Назад в админ-панель", callback_data="admin_panel")]
+    ])
+    return keyboard
+
+
+def get_admin_subscriptions_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура управления подписками"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📊 Статистика подписок", callback_data="admin_subscriptions_stats")],
+        [InlineKeyboardButton(text="🗑 Очистить подписки", callback_data="admin_subscriptions_clear")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_bot_management")]
     ])
     return keyboard
 
@@ -421,8 +434,8 @@ def get_reviews_navigation_keyboard(page: int = 0, total_pages: int = 1) -> Inli
     # Кнопка перехода к курсам
     buttons.append([InlineKeyboardButton(text="📚 Курсы", callback_data="courses")])
     
-    # Кнопка "Назад"
-    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")])
+    # Кнопка "Главное меню"
+    buttons.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard
@@ -456,5 +469,43 @@ def get_mini_course_tariff_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="👨‍🏫 С сопровождением — 10000 ₽", callback_data="tariff_mini_course_mini-support")],
         [InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")]
     ])
+    return keyboard
+
+
+def get_subscription_channel_keyboard(has_active_subscription: bool = False) -> InlineKeyboardMarkup:
+    """Клавиатура для канала с подпиской"""
+    buttons = []
+    
+    if has_active_subscription:
+        buttons.append([InlineKeyboardButton(text="📊 Статус подписки", callback_data="subscription_status")])
+    else:
+        buttons.append([InlineKeyboardButton(text="💳 Купить доступ", callback_data="subscription_buy")])
+    
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    return keyboard
+
+
+def get_subscription_payment_keyboard(payment_url: str, payment_id: str) -> InlineKeyboardMarkup:
+    """Клавиатура оплаты подписки"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💳 Оплатить", url=payment_url)],
+        [InlineKeyboardButton(text="✅ Проверить оплату", callback_data=f"subscription_check_payment_{payment_id}")],
+        [InlineKeyboardButton(text="❌ Отменить", callback_data="subscription_channel")]
+    ])
+    return keyboard
+
+
+def get_subscription_status_keyboard(can_renew: bool = False) -> InlineKeyboardMarkup:
+    """Клавиатура статуса подписки"""
+    buttons = []
+    
+    if can_renew:
+        buttons.append([InlineKeyboardButton(text="🔄 Продлить подписку", callback_data="subscription_buy")])
+    
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="back_navigation")])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard
 

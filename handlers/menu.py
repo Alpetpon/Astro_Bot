@@ -41,12 +41,21 @@ async def navigate_back(callback: CallbackQuery, state: FSMContext):
         'about_me': show_about_me,
         'mini_course': show_mini_course,
         'mini_course_price': show_mini_course_price,
+        'webinar': show_webinar,
         'courses': courses.show_courses_catalog,
         'consultations': consultations.show_consultations_catalog,
         'reviews': reviews.show_reviews_page,
         'my_cabinet': cabinet.show_my_cabinet,
         'my_courses': cabinet.show_my_courses,
     }
+    
+    # Добавляем обработчики подписок, если они доступны
+    try:
+        from . import subscription_handlers
+        handlers_map['subscription_channel'] = subscription_handlers.show_subscription_channel
+        handlers_map['subscription_status'] = subscription_handlers.show_subscription_status
+    except ImportError:
+        pass
     
     # Если это специфичный callback (например, course_xxx), обрабатываем отдельно
     if target_callback.startswith('course_register_'):
@@ -149,7 +158,7 @@ async def show_main_menu(callback: CallbackQuery):
 async def show_about_me(callback: CallbackQuery):
     """Показать информацию о преподавателе с кнопками соц. сетей"""
     
-    text = config.ABOUT_ME_TEXT + "\n\nПереходите в мои соц. сети:"
+    text = config.ABOUT_ME_TEXT + "\n\nПодписывайтесь на мои соц. сети:"
     
     try:
         # Пробуем отредактировать сообщение
@@ -298,7 +307,7 @@ async def download_guide(callback: CallbackQuery):
         # Отправляем файл с кнопками
         await callback.message.answer_document(
             document=file_id,
-            caption=f"{guide.get('emoji') or '💝'} {guide['name']}\n\nПриятного изучения!",
+            caption=f"{guide.get('emoji') or '💝'} {guide['name']}",
             reply_markup=keyboard
         )
         
@@ -460,3 +469,51 @@ async def show_mini_course_price(callback: CallbackQuery):
 async def show_mini_course_tariff_selection(callback: CallbackQuery):
     """Показать выбор тарифа для записи на мини-курс - перенаправление"""
     await show_mini_course_price(callback)
+
+
+@router.callback_query(F.data == "webinar")
+async def show_webinar(callback: CallbackQuery):
+    """Показать информацию о вебинаре"""
+    db = await get_db()
+    user_repo = UserRepository(db)
+    await user_repo.update_activity(callback.from_user.id)
+    
+    # Текст о вебинаре (можно изменить на нужный)
+    text = """🎥 **Вебинар**
+
+Здесь будет информация о предстоящих вебинарах.
+
+Следите за обновлениями!"""
+    
+    try:
+        # Если это видео - удаляем и отправляем новое сообщение
+        if callback.message.video:
+            await callback.message.delete()
+            await callback.bot.send_message(
+                chat_id=callback.message.chat.id,
+                text=text,
+                reply_markup=get_back_keyboard(),
+                parse_mode="Markdown"
+            )
+        else:
+            # Если текст - редактируем
+            await callback.message.edit_text(
+                text,
+                reply_markup=get_back_keyboard(),
+                parse_mode="Markdown"
+            )
+    except Exception:
+        # Если не можем отредактировать - удаляем и отправляем новое
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        
+        await callback.bot.send_message(
+            chat_id=callback.message.chat.id,
+            text=text,
+            reply_markup=get_back_keyboard(),
+            parse_mode="Markdown"
+        )
+    
+    await callback.answer()
