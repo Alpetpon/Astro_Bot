@@ -88,10 +88,10 @@ async def show_my_cabinet(callback: CallbackQuery):
                 text += f"@{bot_config.LEARNING_BOT_USERNAME}\n\n"
                 
                 # Добавляем кнопку для перехода в учебный бот
-                            buttons.append([InlineKeyboardButton(
+                buttons.append([InlineKeyboardButton(
                     text="🎓 Перейти к обучению",
                     url=f"https://t.me/{bot_config.LEARNING_BOT_USERNAME}"
-                            )])
+                )])
             
             if consultations:
                 text += "<b>🔮 Консультации:</b>\n"
