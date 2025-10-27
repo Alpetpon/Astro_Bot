@@ -50,6 +50,17 @@ class MongoDB:
             await cls.db.payments.create_index("status")
             await cls.db.payments.create_index("created_at")
             
+            # Индексы для subscriptions (подписки на канал)
+            await cls.db.subscriptions.create_index("user_id")
+            await cls.db.subscriptions.create_index("is_active")
+            await cls.db.subscriptions.create_index("end_date")
+            await cls.db.subscriptions.create_index([("user_id", 1), ("is_active", 1)])
+            
+            # Индексы для subscription_payments (платежи за подписки)
+            await cls.db.subscription_payments.create_index("payment_id", unique=True)
+            await cls.db.subscription_payments.create_index("user_id")
+            await cls.db.subscription_payments.create_index("status")
+            
             # Индексы для bot_settings
             await cls.db.bot_settings.create_index("setting_key", unique=True)
             

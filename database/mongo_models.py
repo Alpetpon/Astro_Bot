@@ -183,6 +183,128 @@ class Payment:
         )
 
 
+class Subscription:
+    """Модель подписки на канал"""
+    
+    def __init__(
+        self,
+        user_id: int,
+        invite_link: str,
+        start_date: datetime,
+        end_date: datetime,
+        is_active: bool = True,
+        notified_3_days: bool = False,
+        notified_1_day: bool = False,
+        payment_id: Optional[str] = None,
+        created_at: Optional[datetime] = None,
+        _id: Optional[ObjectId] = None
+    ):
+        self.id = _id
+        self.user_id = user_id
+        self.invite_link = invite_link
+        self.start_date = start_date
+        self.end_date = end_date
+        self.is_active = is_active
+        self.notified_3_days = notified_3_days
+        self.notified_1_day = notified_1_day
+        self.payment_id = payment_id
+        self.created_at = created_at or datetime.utcnow()
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Преобразование в словарь для MongoDB"""
+        data = {
+            "user_id": self.user_id,
+            "invite_link": self.invite_link,
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+            "is_active": self.is_active,
+            "notified_3_days": self.notified_3_days,
+            "notified_1_day": self.notified_1_day,
+            "payment_id": self.payment_id,
+            "created_at": self.created_at
+        }
+        if self.id:
+            data["_id"] = self.id
+        return data
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'Subscription':
+        """Создание из словаря MongoDB"""
+        if data is None:
+            return None
+        return cls(
+            _id=data.get("_id"),
+            user_id=data["user_id"],
+            invite_link=data["invite_link"],
+            start_date=data["start_date"],
+            end_date=data["end_date"],
+            is_active=data.get("is_active", True),
+            notified_3_days=data.get("notified_3_days", False),
+            notified_1_day=data.get("notified_1_day", False),
+            payment_id=data.get("payment_id"),
+            created_at=data.get("created_at")
+        )
+
+
+class SubscriptionPayment:
+    """Модель платежа за подписку на канал (отдельно от обычных платежей)"""
+    
+    def __init__(
+        self,
+        user_id: int,
+        payment_id: str,
+        amount: float,
+        currency: str = 'RUB',
+        status: str = 'pending',
+        created_at: Optional[datetime] = None,
+        paid_at: Optional[datetime] = None,
+        subscription_id: Optional[ObjectId] = None,
+        _id: Optional[ObjectId] = None
+    ):
+        self.id = _id
+        self.user_id = user_id
+        self.payment_id = payment_id
+        self.amount = amount
+        self.currency = currency
+        self.status = status
+        self.created_at = created_at or datetime.utcnow()
+        self.paid_at = paid_at
+        self.subscription_id = subscription_id
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Преобразование в словарь для MongoDB"""
+        data = {
+            "user_id": self.user_id,
+            "payment_id": self.payment_id,
+            "amount": self.amount,
+            "currency": self.currency,
+            "status": self.status,
+            "created_at": self.created_at,
+            "paid_at": self.paid_at,
+            "subscription_id": self.subscription_id
+        }
+        if self.id:
+            data["_id"] = self.id
+        return data
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'SubscriptionPayment':
+        """Создание из словаря MongoDB"""
+        if data is None:
+            return None
+        return cls(
+            _id=data.get("_id"),
+            user_id=data["user_id"],
+            payment_id=data["payment_id"],
+            amount=data["amount"],
+            currency=data.get("currency", "RUB"),
+            status=data.get("status", "pending"),
+            created_at=data.get("created_at"),
+            paid_at=data.get("paid_at"),
+            subscription_id=data.get("subscription_id")
+        )
+
+
 class BotSettings:
     """Модель настроек бота"""
     

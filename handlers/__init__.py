@@ -10,6 +10,8 @@ from .admin_guides import router as admin_guides_router
 from .admin_reviews import router as admin_reviews_router
 from .admin_video import router as admin_video_router
 from .admin_mini_course import router as admin_mini_course_router
+from .subscription_handlers import router as subscription_router
+from .admin_subscriptions import router as admin_subscriptions_router
 
 __all__ = [
     'start_router',
@@ -23,6 +25,8 @@ __all__ = [
     'admin_guides_router',
     'admin_reviews_router',
     'admin_video_router',
-    'admin_mini_course_router'
+    'admin_mini_course_router',
+    'subscription_router',
+    'admin_subscriptions_router'
 ]
 

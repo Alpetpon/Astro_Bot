@@ -84,8 +84,7 @@ async def show_my_cabinet(callback: CallbackQuery):
                             text += f"• {emoji} {course_name}\n"
                             text += f"  Куплено: {paid_date}\n"
                 
-                text += "\n🎓 <b>Для изучения материалов перейдите в учебный бот:</b>\n"
-                text += f"@{bot_config.LEARNING_BOT_USERNAME}\n\n"
+                text += "\n🎓 <b>Для изучения материалов нажмите кнопку ниже:</b>\n\n"
                 
                 # Добавляем кнопку для перехода в учебный бот
                 buttons.append([InlineKeyboardButton(

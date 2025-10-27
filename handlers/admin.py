@@ -158,6 +158,15 @@ async def show_stats(callback: CallbackQuery):
     from data import get_all_guides
     total_guides = len(get_all_guides())
     
+    # Статистика подписок (если сервис доступен)
+    subscription_stats = None
+    try:
+        from handlers.subscription_handlers import subscription_service
+        if subscription_service:
+            subscription_stats = await subscription_service.get_subscription_stats()
+    except Exception as e:
+        logger.warning(f"Could not get subscription stats: {e}")
+    
     stats_text = f"""📊 <b>Статистика</b>
 
 👥 <b>Пользователи:</b>
@@ -174,7 +183,18 @@ async def show_stats(callback: CallbackQuery):
 📚 <b>Контент:</b>
 • Курсов: {total_courses}
 • Консультаций: {total_consultations}
-• Гайдов: {total_guides}
+• Гайдов: {total_guides}"""
+    
+    # Добавляем статистику подписок, если доступна
+    if subscription_stats:
+        stats_text += f"""
+
+💫 <b>Подписки на канал:</b>
+• Всего подписок: {subscription_stats['total_subscriptions']}
+• Активных подписок: {subscription_stats['active_subscriptions']}
+• Всего платежей: {subscription_stats['total_payments']}
+• Успешных платежей: {subscription_stats['succeeded_payments']}
+• Общая сумма: {subscription_stats['total_amount']:,.0f} ₽
 """
     
     # Кнопки с возможностью скачать Excel

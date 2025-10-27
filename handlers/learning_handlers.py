@@ -226,6 +226,7 @@ async def show_my_course(callback: CallbackQuery):
                 text += "📚 <b>Модули курса:</b>\n\n"
                 
                 buttons = []
+                has_locked_modules = False  # Флаг для проверки наличия закрытых модулей
                 
                 for module in modules:
                     day_number = module.get('day_number', 999)
@@ -241,6 +242,7 @@ async def show_my_course(callback: CallbackQuery):
                             callback_data=f"mini_module_{module['id']}"
                         )])
                     else:
+                        has_locked_modules = True
                         days_until_unlock = (day_number - 1) - days_passed
                         unlock_date = payment.paid_at + timedelta(days=(day_number - 1))
                         unlock_date_str = unlock_date.strftime('%d.%m.%Y %H:%M')
@@ -256,7 +258,9 @@ async def show_my_course(callback: CallbackQuery):
                         text += f"🔒 {module_emoji} {module_title}\n"
                         text += f"   Откроется: {unlock_date_str} ({time_str})\n"
                 
-                text += "\n💡 Новый модуль открывается каждый день!"
+                # Показываем подсказку только если есть закрытые модули
+                if has_locked_modules:
+                    text += "\n💡 Новый модуль открывается каждый день!"
                 
                 buttons.append([InlineKeyboardButton(text="◀️ Мои курсы", callback_data="my_courses")])
                 
