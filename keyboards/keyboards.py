@@ -280,14 +280,17 @@ def get_consultations_keyboard(consultations: List) -> InlineKeyboardMarkup:
     return keyboard
 
 
-def get_consultation_detail_keyboard(consultation_slug: str, show_navigation: bool = True) -> InlineKeyboardMarkup:
+def get_consultation_detail_keyboard(consultation_slug: str, consultation_name: str = "", show_navigation: bool = True) -> InlineKeyboardMarkup:
     """Клавиатура карточки консультации"""
     from config import config
     
     buttons = []
     
     # Заготовленное сообщение для записи на консультацию
-    message_text = "Здравствуйте! Хочу записаться на консультацию."
+    if consultation_name:
+        message_text = f"Здравствуйте! Хочу записаться на консультацию: {consultation_name}"
+    else:
+        message_text = "Здравствуйте! Хочу записаться на консультацию."
     encoded_text = quote(message_text)
     
     # Кнопка записи - ведет в Telegram к астрологу с заготовленным сообщением

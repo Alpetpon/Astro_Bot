@@ -160,14 +160,14 @@ async def show_consultation_detail(callback: CallbackQuery):
             await callback.bot.send_message(
                 chat_id=callback.message.chat.id,
                 text=text,
-                reply_markup=get_consultation_detail_keyboard(consultation_slug),
+                reply_markup=get_consultation_detail_keyboard(consultation_slug, consultation['name']),
                 parse_mode="Markdown"
             )
         else:
             # Если текст - редактируем
             await callback.message.edit_text(
                 text,
-                reply_markup=get_consultation_detail_keyboard(consultation_slug),
+                reply_markup=get_consultation_detail_keyboard(consultation_slug, consultation['name']),
                 parse_mode="Markdown"
             )
     except Exception:
@@ -180,7 +180,7 @@ async def show_consultation_detail(callback: CallbackQuery):
         await callback.bot.send_message(
             chat_id=callback.message.chat.id,
             text=text,
-            reply_markup=get_consultation_detail_keyboard(consultation_slug),
+            reply_markup=get_consultation_detail_keyboard(consultation_slug, consultation['name']),
             parse_mode="Markdown"
         )
     
