@@ -142,7 +142,7 @@ async def run_learning_bot():
 async def fix_mongodb_index():
     """Принудительное исправление индекса payment_id перед запуском"""
     try:
-        db = await mongodb.get_database()
+        db = mongodb.get_database()
         
         # Получаем список индексов
         indexes = await db.payments.index_information()
