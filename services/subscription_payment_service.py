@@ -27,13 +27,14 @@ class SubscriptionPaymentService:
         
         logger.info(f"SubscriptionPaymentService initialized: {self.price} {self.currency} for {self.days} days")
     
-    def create_payment(self, user_id: int, return_url: str = None) -> Dict[str, Any]:
+    def create_payment(self, user_id: int, return_url: str = None, customer_email: str = None) -> Dict[str, Any]:
         """
         Создание платежа для подписки на канал
         
         Args:
             user_id: Telegram ID пользователя
             return_url: URL для возврата после оплаты
+            customer_email: Email покупателя для чека
             
         Returns:
             Dict с информацией о платеже
@@ -46,8 +47,8 @@ class SubscriptionPaymentService:
             if not return_url:
                 return_url = "https://t.me/your_bot"
             
-            # Создаем платеж
-            payment = Payment.create({
+            # Формируем данные платежа
+            payment_data = {
                 "amount": {
                     "value": f"{self.price:.2f}",
                     "currency": self.currency
@@ -64,7 +65,7 @@ class SubscriptionPaymentService:
                 },
                 "receipt": {
                     "customer": {
-                        "email": config.RECEIPT_EMAIL
+                        "email": customer_email or config.RECEIPT_EMAIL
                     },
                     "items": [
                         {
@@ -80,7 +81,10 @@ class SubscriptionPaymentService:
                         }
                     ]
                 }
-            }, idempotence_key)
+            }
+            
+            # Создаем платеж
+            payment = Payment.create(payment_data, idempotence_key)
             
             logger.info(f"Payment created: {payment.id} for user {user_id}")
             

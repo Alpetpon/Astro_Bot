@@ -2,9 +2,13 @@
 Обработчики для подписки на канал
 """
 import logging
+import re
 from datetime import datetime
 from aiogram import Router, F
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.filters import StateFilter
 
 from config import config
 from keyboards.keyboards import (
@@ -16,6 +20,11 @@ from keyboards.keyboards import (
 logger = logging.getLogger(__name__)
 
 router = Router()
+
+
+class SubscriptionEmailStates(StatesGroup):
+    """Состояния для запроса email при оплате подписки"""
+    waiting_for_email = State()
 
 # Глобальные переменные для сервисов (будут инициализированы в bot.py)
 subscription_service = None
@@ -84,8 +93,8 @@ async def show_subscription_channel(callback: CallbackQuery):
 
 
 @router.callback_query(F.data == "subscription_buy")
-async def buy_subscription(callback: CallbackQuery):
-    """Создать платеж для покупки подписки"""
+async def buy_subscription(callback: CallbackQuery, state: FSMContext):
+    """Запрос email для покупки подписки"""
     try:
         if not payment_service or not subscription_service:
             await callback.answer("Сервис временно недоступен", show_alert=True)
@@ -97,15 +106,88 @@ async def buy_subscription(callback: CallbackQuery):
             await callback.answer("У вас уже есть активная подписка!", show_alert=True)
             return
         
-        # Создаем платеж через YooKassa
+        # Запрашиваем email
+        await state.set_state(SubscriptionEmailStates.waiting_for_email)
+        
+        # Отправляем сообщение с запросом email
+        try:
+            await callback.message.edit_text(
+                "📧 **Введите ваш email**\n\n"
+                "На указанную почту будет отправлен чек об оплате.\n\n"
+                "Пример: example@mail.ru",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_subscription_payment")]
+                ])
+            )
+        except Exception:
+            await callback.message.delete()
+            await callback.bot.send_message(
+                chat_id=callback.message.chat.id,
+                text="📧 **Введите ваш email**\n\n"
+                     "На указанную почту будет отправлен чек об оплате.\n\n"
+                     "Пример: example@mail.ru",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_subscription_payment")]
+                ]),
+                parse_mode="Markdown"
+            )
+        
+        await callback.answer()
+        
+    except Exception as e:
+        logger.error(f"Error in buy_subscription: {e}")
+        await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
+
+
+@router.callback_query(F.data == "cancel_subscription_payment")
+async def cancel_subscription_payment(callback: CallbackQuery, state: FSMContext):
+    """Отмена оплаты подписки"""
+    await state.clear()
+    await callback.message.edit_text(
+        "❌ Оплата отменена.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Назад", callback_data="subscription_channel")]
+        ])
+    )
+    await callback.answer()
+
+
+@router.message(StateFilter(SubscriptionEmailStates.waiting_for_email))
+async def process_subscription_email(message: Message, state: FSMContext):
+    """Обработка введенного email и создание платежа для подписки"""
+    email = message.text.strip()
+    
+    # Валидация email
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_pattern, email):
+        await message.answer(
+            "❌ Неверный формат email. Пожалуйста, введите корректный email.\n\n"
+            "Пример: example@mail.ru",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_subscription_payment")]
+            ])
+        )
+        return
+    
+    try:
+        if not payment_service or not subscription_service:
+            await message.answer("❌ Сервис временно недоступен. Попробуйте позже.")
+            await state.clear()
+            return
+        
+        # Создаем платеж через YooKassa с email
+        bot_info = await message.bot.get_me()
+        return_url = f"https://t.me/{bot_info.username}" if bot_info.username else "https://t.me"
+        
         payment_data = payment_service.create_payment(
-            user_id=callback.from_user.id,
-            return_url=f"https://t.me/{(await callback.bot.get_me()).username}"
+            user_id=message.from_user.id,
+            return_url=return_url,
+            customer_email=email
         )
         
         # Сохраняем платеж в БД
         await subscription_service.save_payment(
-            user_id=callback.from_user.id,
+            user_id=message.from_user.id,
             payment_id=payment_data['payment_id'],
             amount=payment_data['amount'],
             currency=payment_data['currency'],
@@ -117,6 +199,7 @@ async def buy_subscription(callback: CallbackQuery):
 
 💰 Сумма: {payment_data['amount']} {payment_data['currency']}
 📅 Срок: {config.SUBSCRIPTION_DAYS} дней
+📧 Email для чека: {email}
 
 Для оплаты:
 1. Нажмите кнопку "Оплатить"
@@ -126,7 +209,7 @@ async def buy_subscription(callback: CallbackQuery):
 После успешной оплаты вы получите уникальную ссылку для вступления в канал."""
         
         # Отправляем сообщение с кнопками
-        await callback.message.edit_text(
+        await message.answer(
             text,
             reply_markup=get_subscription_payment_keyboard(
                 payment_data['confirmation_url'],
@@ -135,11 +218,13 @@ async def buy_subscription(callback: CallbackQuery):
             parse_mode="Markdown"
         )
         
-        await callback.answer()
+        # Очищаем state
+        await state.clear()
         
     except Exception as e:
-        logger.error(f"Error creating payment: {e}")
-        await callback.answer("Ошибка при создании платежа. Попробуйте позже.", show_alert=True)
+        logger.error(f"Error in process_subscription_email: {e}")
+        await message.answer("❌ Ошибка при создании платежа. Попробуйте позже.")
+        await state.clear()
 
 
 @router.callback_query(F.data.startswith("subscription_check_payment_"))

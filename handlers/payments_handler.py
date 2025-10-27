@@ -1,7 +1,11 @@
 import logging
 from datetime import datetime
+import re
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.filters import StateFilter
 from bson import ObjectId
 
 from database import get_db, User, Payment, UserRepository, PaymentRepository
@@ -14,9 +18,14 @@ router = Router()
 yookassa = YooKassaPayment()
 
 
+class PaymentEmailStates(StatesGroup):
+    """Состояния для запроса email при оплате"""
+    waiting_for_email = State()
+
+
 @router.callback_query(F.data.startswith("tariff_"))
-async def process_tariff_selection(callback: CallbackQuery):
-    """Обработка выбора тарифа и создание платежа"""
+async def process_tariff_selection(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора тарифа и запрос email"""
     logger.info(f"User {callback.from_user.id} selecting tariff: {callback.data}")
     
     # Проверяем, это мини-курс или обычный курс
@@ -80,12 +89,92 @@ async def process_tariff_selection(callback: CallbackQuery):
             await callback.answer("Ошибка при создании платежа", show_alert=True)
             return
         
+        # Сохраняем данные в state для последующего создания платежа
+        await state.update_data(
+            course_slug=course_slug,
+            tariff_id=tariff_id,
+            product_name=product_name,
+            product_type=product_type,
+            tariff_name=tariff['name'],
+            tariff_price=tariff['price'],
+            tariff_with_support=tariff.get('with_support', False)
+        )
+        
+        # Запрашиваем email
+        await state.set_state(PaymentEmailStates.waiting_for_email)
+        
+        # Отправляем сообщение с запросом email
+        await callback.message.edit_text(
+            "📧 **Введите ваш email**\n\n"
+            "На указанную почту будет отправлен чек об оплате.\n\n"
+            "Пример: example@mail.ru",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_payment")]
+            ])
+        )
+        await callback.answer()
+    
+    except Exception as e:
+        logger.error(f"Error in process_tariff_selection: {e}", exc_info=True)
+        await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
+
+
+@router.callback_query(F.data == "cancel_payment")
+async def cancel_payment_request(callback: CallbackQuery, state: FSMContext):
+    """Отмена запроса на оплату"""
+    await state.clear()
+    await callback.message.edit_text(
+        "❌ Оплата отменена.",
+        reply_markup=get_back_keyboard("main_menu")
+    )
+    await callback.answer()
+
+
+@router.message(StateFilter(PaymentEmailStates.waiting_for_email))
+async def process_email_and_create_payment(message: Message, state: FSMContext):
+    """Обработка введенного email и создание платежа"""
+    email = message.text.strip()
+    
+    # Валидация email
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_pattern, email):
+        await message.answer(
+            "❌ Неверный формат email. Пожалуйста, введите корректный email.\n\n"
+            "Пример: example@mail.ru",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_payment")]
+            ])
+        )
+        return
+    
+    # Получаем сохраненные данные
+    data = await state.get_data()
+    course_slug = data.get('course_slug')
+    tariff_id = data.get('tariff_id')
+    product_name = data.get('product_name')
+    product_type = data.get('product_type')
+    tariff_name = data.get('tariff_name')
+    tariff_price = data.get('tariff_price')
+    tariff_with_support = data.get('tariff_with_support', False)
+    
+    db = await get_db()
+    user_repo = UserRepository(db)
+    payment_repo = PaymentRepository(db)
+    
+    try:
+        user = await user_repo.get_by_telegram_id(message.from_user.id)
+        if not user:
+            logger.error(f"User not found in database: {message.from_user.id}")
+            await message.answer("❌ Ошибка при создании платежа. Попробуйте позже.")
+            await state.clear()
+            return
+        
         # Создаем платеж в базе
         payment = Payment(
             user_id=user.id,
             course_slug=course_slug,
             tariff_id=tariff_id,
-            amount=tariff['price'],
+            amount=tariff_price,
             status='pending',
             product_type=product_type
         )
@@ -93,28 +182,29 @@ async def process_tariff_selection(callback: CallbackQuery):
         
         logger.info(f"Payment created in DB: {payment.id} for user {user.id}")
         
-        # Создаем платеж в ЮKassa
-        description = f"Оплата: «{product_name}» - {tariff['name']}"
+        # Создаем платеж в ЮKassa с email
+        description = f"Оплата: «{product_name}» - {tariff_name}"
         
         # Получаем информацию о боте для return_url
-        bot_info = await callback.bot.get_me()
+        bot_info = await message.bot.get_me()
         return_url = f"https://t.me/{bot_info.username}" if bot_info.username else "https://t.me"
         
         payment_result = yookassa.create_payment(
-            amount=tariff['price'],
+            amount=tariff_price,
             description=description,
-            return_url=return_url
+            return_url=return_url,
+            customer_email=email
         )
         
         if not payment_result:
             await payment_repo.update(payment.id, {"status": "failed"})
             logger.error(f"Failed to create payment in YooKassa for payment {payment.id}")
             back_callback = "mini_course" if product_type == 'mini_course' else "courses"
-            await callback.message.edit_text(
+            await message.answer(
                 "❌ Ошибка при создании платежа. Попробуйте позже.",
                 reply_markup=get_back_keyboard(back_callback)
             )
-            await callback.answer()
+            await state.clear()
             return
         
         # Обновляем платеж данными из ЮKassa
@@ -124,18 +214,19 @@ async def process_tariff_selection(callback: CallbackQuery):
         })
         
         # Формируем сообщение об оплате
-        support_text = "✅ С сопровождением куратора" if tariff.get('with_support') else "📚 Самостоятельное обучение"
+        support_text = "✅ С сопровождением куратора" if tariff_with_support else "📚 Самостоятельное обучение"
         
         product_label = "Мини-курс" if product_type == 'mini_course' else "Курс"
         text = f"💳 **Оплата {product_label.lower()}а**\n\n"
         text += f"**{product_label}:** {product_name}\n"
-        text += f"**Тариф:** {tariff['name']}\n"
+        text += f"**Тариф:** {tariff_name}\n"
         text += f"**Формат:** {support_text}\n"
-        text += f"**Стоимость:** {tariff['price']} ₽\n\n"
+        text += f"**Стоимость:** {tariff_price} ₽\n"
+        text += f"**Email для чека:** {email}\n\n"
         text += "• Нажмите кнопку «Оплатить» для перехода на страницу оплаты.\n"
         
         # Добавляем информацию для тарифов без обратной связи
-        if not tariff.get('with_support'):
+        if not tariff_with_support:
             text += "• При покупке курса без обратной связи изучение можно начать сразу после покупки.\n"
         
         text += f"• После успешной оплаты доступ к {product_label.lower()}у откроется автоматически!"
@@ -143,7 +234,7 @@ async def process_tariff_selection(callback: CallbackQuery):
         # Определяем callback для кнопки "Назад"
         back_callback = "mini_course_price" if product_type == 'mini_course' else f"course_{course_slug}"
         
-        await callback.message.edit_text(
+        sent_message = await message.answer(
             text,
             reply_markup=get_payment_keyboard(payment_result['confirmation_url'], str(payment.id), back_callback),
             parse_mode="Markdown"
@@ -151,15 +242,17 @@ async def process_tariff_selection(callback: CallbackQuery):
         
         # Сохраняем chat_id и message_id для последующего редактирования
         await payment_repo.update(payment.id, {
-            "chat_id": callback.message.chat.id,
-            "message_id": callback.message.message_id
+            "chat_id": sent_message.chat.id,
+            "message_id": sent_message.message_id
         })
         
-        await callback.answer()
-    
+        # Очищаем state
+        await state.clear()
+        
     except Exception as e:
-        logger.error(f"Error in process_tariff_selection: {e}", exc_info=True)
-        await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
+        logger.error(f"Error in process_email_and_create_payment: {e}", exc_info=True)
+        await message.answer("❌ Произошла ошибка. Попробуйте позже.")
+        await state.clear()
 
 
 @router.callback_query(F.data.startswith("check_payment_"))
