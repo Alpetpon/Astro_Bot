@@ -17,7 +17,7 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👤 Мой путь", callback_data="about_me")],
         [InlineKeyboardButton(text="💕 Гайды", callback_data="guides_list")],
-        [InlineKeyboardButton(text="🌌 7 дней, чтобы понять свой код", callback_data="mini_course")],
+        [InlineKeyboardButton(text="🌌 Бесплатный мини-курс", callback_data="mini_course")],
         [InlineKeyboardButton(text="📚 Курсы", callback_data="courses")],
         [InlineKeyboardButton(text="🎥 Вебинар", callback_data="webinar")],
         [InlineKeyboardButton(text="💫 Вступить в закрытый клуб", callback_data="subscription_channel")],
