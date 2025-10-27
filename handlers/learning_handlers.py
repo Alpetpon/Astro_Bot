@@ -84,9 +84,6 @@ async def cmd_start(message: Message):
                     callback_data=f"my_course_{payment.course_slug}"
                 )])
     
-    # Кнопка "Мои курсы" (главное меню)
-    buttons.append([InlineKeyboardButton(text="📚 Мои курсы", callback_data="my_courses")])
-    
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     
     await message.answer(text, reply_markup=keyboard)
