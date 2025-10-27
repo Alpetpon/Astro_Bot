@@ -40,6 +40,7 @@ class Config:
     YOOKASSA_SHOP_ID = os.getenv('YOOKASSA_SHOP_ID')
     YOOKASSA_SECRET_KEY = os.getenv('YOOKASSA_SECRET_KEY')
     WEBHOOK_URL = os.getenv('WEBHOOK_URL', '')
+    RECEIPT_EMAIL = os.getenv('RECEIPT_EMAIL', 'info@example.com')  # Email для чеков (54-ФЗ)
     
     # Telegram канал для платной подписки
     SUBSCRIPTION_CHANNEL_ID = os.getenv('SUBSCRIPTION_CHANNEL_ID', '')  # Например: -1003244100380

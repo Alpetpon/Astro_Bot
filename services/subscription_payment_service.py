@@ -61,6 +61,24 @@ class SubscriptionPaymentService:
                 "metadata": {
                     "user_id": str(user_id),
                     "product_type": "channel_subscription"
+                },
+                "receipt": {
+                    "customer": {
+                        "email": config.RECEIPT_EMAIL
+                    },
+                    "items": [
+                        {
+                            "description": f"Подписка на канал на {self.days} дней",
+                            "quantity": "1.00",
+                            "amount": {
+                                "value": f"{self.price:.2f}",
+                                "currency": self.currency
+                            },
+                            "vat_code": 1,  # НДС не облагается
+                            "payment_mode": "full_payment",
+                            "payment_subject": "service"
+                        }
+                    ]
                 }
             }, idempotence_key)
             

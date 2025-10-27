@@ -27,7 +27,8 @@ class YooKassaPayment:
         amount: float, 
         description: str, 
         return_url: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        customer_email: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Создание платежа в YooKassa
@@ -37,6 +38,7 @@ class YooKassaPayment:
             description: Описание платежа
             return_url: URL для возврата после оплаты
             metadata: Дополнительные метаданные для платежа
+            customer_email: Email покупателя для чека
             
         Returns:
             dict: Данные созданного платежа или None при ошибке
@@ -58,7 +60,25 @@ class YooKassaPayment:
             },
             "capture": True,
             "description": description,
-            "metadata": payment_metadata
+            "metadata": payment_metadata,
+            "receipt": {
+                "customer": {
+                    "email": customer_email or config.RECEIPT_EMAIL
+                },
+                "items": [
+                    {
+                        "description": description[:128],  # Максимум 128 символов
+                        "quantity": "1.00",
+                        "amount": {
+                            "value": f"{amount:.2f}",
+                            "currency": "RUB"
+                        },
+                        "vat_code": 1,  # НДС не облагается
+                        "payment_mode": "full_payment",
+                        "payment_subject": "service"
+                    }
+                ]
+            }
         }
         
         try:
