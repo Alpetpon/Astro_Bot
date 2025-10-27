@@ -144,7 +144,6 @@ class Payment:
             "consultation_slug": self.consultation_slug,
             "consultation_option_id": self.consultation_option_id,
             "product_id": self.product_id,
-            "payment_id": self.payment_id,
             "confirmation_url": self.confirmation_url,
             "is_payment_link": self.is_payment_link,
             "chat_id": self.chat_id,
@@ -152,6 +151,9 @@ class Payment:
             "created_at": self.created_at,
             "paid_at": self.paid_at
         }
+        # Only include payment_id if it's not None (for sparse index compatibility)
+        if self.payment_id is not None:
+            data["payment_id"] = self.payment_id
         if self.id:
             data["_id"] = self.id
         return data

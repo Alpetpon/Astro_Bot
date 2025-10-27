@@ -167,9 +167,25 @@ async def fix_mongodb_index():
                 logger.info("✅ Новый sparse индекс payment_id создан")
                 logger.info("=" * 60)
             else:
-                logger.info("✓ Индекс payment_id корректный (sparse), исправление не требуется")
+                logger.info("✓ Индекс payment_id корректный (sparse)")
         else:
             logger.info("⚠️ Индекс payment_id отсутствует, будет создан автоматически")
+        
+        # Миграция: удаляем payment_id=null из существующих документов
+        logger.info("Проверка документов с payment_id=null...")
+        null_payments_count = await db.payments.count_documents({"payment_id": None})
+        
+        if null_payments_count > 0:
+            logger.info(f"🔧 Найдено {null_payments_count} платежей с payment_id=null")
+            logger.info("🔧 Удаление поля payment_id из этих документов...")
+            
+            result = await db.payments.update_many(
+                {"payment_id": None},
+                {"$unset": {"payment_id": ""}}
+            )
+            logger.info(f"✅ Обновлено {result.modified_count} документов (удалено поле payment_id)")
+        else:
+            logger.info("✓ Нет документов с payment_id=null")
     
     except Exception as e:
         logger.error(f"❌ Ошибка при исправлении индекса payment_id: {e}")
