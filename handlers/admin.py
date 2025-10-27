@@ -2889,7 +2889,7 @@ async def confirm_user_deletion(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("confirm_delete_user_"))
 async def delete_user(callback: CallbackQuery):
-    """Удаление пользователя из базы данных"""
+    """Удаление пользователя из базы данных и канала"""
     if not is_admin(callback.from_user.id):
         await callback.answer("❌ У вас нет доступа", show_alert=True)
         return
@@ -2901,12 +2901,42 @@ async def delete_user(callback: CallbackQuery):
     user_repo = UserRepository(db)
     
     try:
-        # Удаляем пользователя
+        # Проверяем наличие активной подписки на канал
+        from services.subscription_service import SubscriptionService
+        from database.mongodb import mongodb
+        
+        subscription_service = SubscriptionService(callback.bot)
+        
+        active_subscription = await subscription_service.get_active_subscription(telegram_id)
+        
+        kicked_from_channel = False
+        subscription_removed = False
+        
+        # Если есть активная подписка - исключаем из канала
+        if active_subscription:
+            logger.info(f"User {telegram_id} has active subscription, kicking from channel")
+            kicked_from_channel = await subscription_service.kick_user_from_channel(telegram_id)
+            
+            # Удаляем подписку из БД
+            mongodb_db = mongodb.get_database()
+            result = await mongodb_db.subscriptions.delete_many({"user_id": telegram_id})
+            subscription_removed = result.deleted_count > 0
+            logger.info(f"Removed {result.deleted_count} subscription(s) for user {telegram_id}")
+        
+        # Удаляем пользователя из БД
         success = await user_repo.delete_by_telegram_id(telegram_id)
         
         if success:
+            result_text = f"✅ Пользователь с ID `{telegram_id}` успешно удален из базы данных!"
+            
+            if kicked_from_channel:
+                result_text += "\n✅ Пользователь исключен из канала"
+            
+            if subscription_removed:
+                result_text += "\n✅ Подписка удалена из БД"
+            
             await callback.message.edit_text(
-                f"✅ Пользователь с ID `{telegram_id}` успешно удален из базы данных!",
+                result_text,
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_users")]
                 ]),
