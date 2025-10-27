@@ -80,6 +80,11 @@ class BroadcastStates(StatesGroup):
     waiting_for_caption = State()
 
 
+class UserManagement(StatesGroup):
+    """Состояния для управления пользователями"""
+    waiting_for_user_id = State()
+
+
 @router.message(Command("admin"))
 async def cmd_admin(message: Message):
     """Вход в админ-панель по команде /admin"""
@@ -2750,4 +2755,180 @@ async def create_payment_link(message: Message, state: FSMContext):
             reply_markup=get_back_to_admin_keyboard()
         )
         await state.clear()
+
+
+# ==================== УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ ====================
+
+@router.callback_query(F.data == "admin_users")
+async def show_user_management(callback: CallbackQuery):
+    """Меню управления пользователями"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ У вас нет доступа", show_alert=True)
+        return
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🗑 Удалить пользователя", callback_data="admin_delete_user")],
+        [InlineKeyboardButton(text="◀️ Назад в админ-панель", callback_data="admin_panel")]
+    ])
+    
+    await callback.message.edit_text(
+        "👥 **Управление пользователями**\n\n"
+        "Выберите действие:",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_delete_user")
+async def request_user_id_for_deletion(callback: CallbackQuery, state: FSMContext):
+    """Запрос ID пользователя для удаления"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ У вас нет доступа", show_alert=True)
+        return
+    
+    await state.set_state(UserManagement.waiting_for_user_id)
+    
+    await callback.message.edit_text(
+        "🗑 **Удаление пользователя**\n\n"
+        "Введите Telegram ID пользователя, которого нужно удалить:\n\n"
+        "⚠️ <b>Внимание!</b> Это действие необратимо!",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отменить", callback_data="admin_users")]
+        ])
+    )
+    await callback.answer()
+
+
+@router.message(StateFilter(UserManagement.waiting_for_user_id))
+async def confirm_user_deletion(message: Message, state: FSMContext):
+    """Подтверждение удаления пользователя"""
+    if not is_admin(message.from_user.id):
+        await message.answer("❌ У вас нет доступа")
+        return
+    
+    try:
+        telegram_id = int(message.text.strip())
+    except ValueError:
+        await message.answer(
+            "❌ Неверный формат ID. Введите числовой Telegram ID пользователя:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отменить", callback_data="admin_users")]
+            ])
+        )
+        return
+    
+    db = await get_db()
+    user_repo = UserRepository(db)
+    
+    # Проверяем, существует ли пользователь
+    user = await user_repo.get_by_telegram_id(telegram_id)
+    
+    if not user:
+        await message.answer(
+            f"❌ Пользователь с ID {telegram_id} не найден в базе данных.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_users")]
+            ])
+        )
+        await state.clear()
+        return
+    
+    # Проверяем, не пытается ли админ удалить себя
+    if telegram_id == message.from_user.id:
+        await message.answer(
+            "❌ Вы не можете удалить сами себя!",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_users")]
+            ])
+        )
+        await state.clear()
+        return
+    
+    # Проверяем, не является ли пользователь админом
+    if is_admin(telegram_id):
+        await message.answer(
+            "❌ Нельзя удалить администратора!",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_users")]
+            ])
+        )
+        await state.clear()
+        return
+    
+    # Сохраняем данные для подтверждения
+    await state.update_data(telegram_id=telegram_id)
+    
+    # Формируем информацию о пользователе
+    user_info = f"👤 **Информация о пользователе:**\n\n"
+    user_info += f"🆔 Telegram ID: `{user.telegram_id}`\n"
+    if user.username:
+        user_info += f"👤 Username: @{user.username}\n"
+    if user.first_name:
+        user_info += f"📝 Имя: {user.first_name}\n"
+    user_info += f"📅 Зарегистрирован: {user.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+    if user.last_activity:
+        user_info += f"🕐 Последняя активность: {user.last_activity.strftime('%d.%m.%Y %H:%M')}\n"
+    
+    user_info += f"\n⚠️ **Вы уверены, что хотите удалить этого пользователя?**\n"
+    user_info += f"Это действие необратимо!"
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"confirm_delete_user_{telegram_id}")],
+        [InlineKeyboardButton(text="❌ Отменить", callback_data="admin_users")]
+    ])
+    
+    await message.answer(
+        user_info,
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
+    
+    await state.clear()
+
+
+@router.callback_query(F.data.startswith("confirm_delete_user_"))
+async def delete_user(callback: CallbackQuery):
+    """Удаление пользователя из базы данных"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ У вас нет доступа", show_alert=True)
+        return
+    
+    # Извлекаем telegram_id из callback_data
+    telegram_id = int(callback.data.replace("confirm_delete_user_", ""))
+    
+    db = await get_db()
+    user_repo = UserRepository(db)
+    
+    try:
+        # Удаляем пользователя
+        success = await user_repo.delete_by_telegram_id(telegram_id)
+        
+        if success:
+            await callback.message.edit_text(
+                f"✅ Пользователь с ID `{telegram_id}` успешно удален из базы данных!",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_users")]
+                ]),
+                parse_mode="Markdown"
+            )
+            logger.info(f"Admin {callback.from_user.id} deleted user {telegram_id}")
+        else:
+            await callback.message.edit_text(
+                f"❌ Не удалось удалить пользователя. Возможно, он уже был удален.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_users")]
+                ])
+            )
+    
+    except Exception as e:
+        logger.error(f"Error deleting user {telegram_id}: {e}", exc_info=True)
+        await callback.message.edit_text(
+            f"❌ Произошла ошибка при удалении пользователя: {str(e)}",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_users")]
+            ])
+        )
+    
+    await callback.answer()
 

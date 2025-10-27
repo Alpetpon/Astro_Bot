@@ -76,6 +76,11 @@ class UserRepository:
         async for data in cursor:
             users.append(User.from_dict(data))
         return users
+    
+    async def delete_by_telegram_id(self, telegram_id: int) -> bool:
+        """Удаление пользователя по Telegram ID"""
+        result = await self.collection.delete_one({"telegram_id": telegram_id})
+        return result.deleted_count > 0
 
 
 class PaymentRepository:
