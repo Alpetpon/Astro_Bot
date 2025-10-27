@@ -86,7 +86,7 @@ class SubscriptionPaymentService:
             # Создаем платеж
             payment = Payment.create(payment_data, idempotence_key)
             
-            logger.info(f"Payment created: {payment.id} for user {user_id}")
+            logger.info(f"Payment created: {payment.id} for user {user_id}, email: {customer_email or config.RECEIPT_EMAIL}")
             
             return {
                 "payment_id": payment.id,

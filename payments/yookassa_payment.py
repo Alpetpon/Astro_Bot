@@ -82,7 +82,7 @@ class YooKassaPayment:
         }
         
         try:
-            logger.info(f"Creating payment: amount={amount}, description={description}")
+            logger.info(f"Creating payment: amount={amount}, description={description}, email={customer_email or config.RECEIPT_EMAIL}")
             payment = Payment.create(payment_data, idempotence_key)
             
             result = {
@@ -93,7 +93,7 @@ class YooKassaPayment:
                 'currency': payment.amount.currency
             }
             
-            logger.info(f"Payment created successfully: {payment.id}")
+            logger.info(f"Payment created successfully: {payment.id}, receipt will be sent to: {customer_email or config.RECEIPT_EMAIL}")
             return result
             
         except Exception as e:
