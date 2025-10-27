@@ -19,11 +19,11 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="💕 Гайды", callback_data="guides_list")],
         [InlineKeyboardButton(text="🌌 7 дней, чтобы понять свой код", callback_data="mini_course")],
         [InlineKeyboardButton(text="📚 Курсы", callback_data="courses")],
-        [InlineKeyboardButton(text="⭐️ Отзывы", callback_data="reviews")],
-        [InlineKeyboardButton(text="🔮 Консультации", callback_data="consultations")],
-        [InlineKeyboardButton(text="💫 Telegram канал", callback_data="subscription_channel")],
         [InlineKeyboardButton(text="🎥 Вебинар", callback_data="webinar")],
-        [InlineKeyboardButton(text="🏠 Мой кабинет", callback_data="my_cabinet")]
+        [InlineKeyboardButton(text="💫 Вступить в закрытый клуб", callback_data="subscription_channel")],
+        [InlineKeyboardButton(text="🔮 Консультации", callback_data="consultations")],
+        [InlineKeyboardButton(text="🏠 Мой кабинет", callback_data="my_cabinet")],
+        [InlineKeyboardButton(text="⭐️ Отзывы", callback_data="reviews")]
     ])
     return keyboard
 
