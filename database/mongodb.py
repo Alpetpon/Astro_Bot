@@ -39,9 +39,6 @@ class MongoDB:
             return
         
         try:
-            # Исправление индекса payment_id (если нужно)
-            await cls._fix_payment_id_index()
-            
             # Индексы для users
             await cls.db.users.create_index("telegram_id", unique=True)
             await cls.db.users.create_index("username")
@@ -71,37 +68,6 @@ class MongoDB:
             
         except Exception as e:
             logger.warning(f"⚠️ Ошибка создания индексов: {e}")
-    
-    @classmethod
-    async def _fix_payment_id_index(cls):
-        """
-        Автоматическое исправление индекса payment_id
-        Удаляет старый non-sparse индекс и создает новый sparse индекс
-        """
-        try:
-            # Получаем список индексов
-            indexes = await cls.db.payments.index_information()
-            
-            # Проверяем индекс payment_id_1
-            if 'payment_id_1' in indexes:
-                index_info = indexes['payment_id_1']
-                
-                # Если индекс не sparse - удаляем и пересоздаем
-                if not index_info.get('sparse', False):
-                    logger.info("🔧 Обнаружен старый non-sparse индекс payment_id. Исправляем...")
-                    
-                    # Удаляем старый индекс
-                    await cls.db.payments.drop_index('payment_id_1')
-                    logger.info("✅ Старый индекс payment_id удален")
-                    
-                    # Создаем новый sparse индекс
-                    await cls.db.payments.create_index("payment_id", unique=True, sparse=True)
-                    logger.info("✅ Новый sparse индекс payment_id создан")
-                else:
-                    logger.debug("✓ Индекс payment_id уже sparse, исправление не требуется")
-            
-        except Exception as e:
-            logger.warning(f"⚠️ Ошибка при исправлении индекса payment_id: {e}")
     
     @classmethod
     async def close(cls):

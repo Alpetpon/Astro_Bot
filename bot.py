@@ -139,12 +139,53 @@ async def run_learning_bot():
         await learning_bot.session.close()
 
 
+async def fix_mongodb_index():
+    """Принудительное исправление индекса payment_id перед запуском"""
+    try:
+        db = await mongodb.get_database()
+        
+        # Получаем список индексов
+        indexes = await db.payments.index_information()
+        
+        # Проверяем индекс payment_id_1
+        if 'payment_id_1' in indexes:
+            index_info = indexes['payment_id_1']
+            
+            # Если индекс не sparse - удаляем и пересоздаем
+            if not index_info.get('sparse', False):
+                logger.info("=" * 60)
+                logger.info("🔧 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обнаружен старый non-sparse индекс payment_id")
+                logger.info("🔧 Удаляем и пересоздаем правильный индекс...")
+                logger.info("=" * 60)
+                
+                # Удаляем старый индекс
+                await db.payments.drop_index('payment_id_1')
+                logger.info("✅ Старый индекс payment_id удален")
+                
+                # Создаем новый sparse индекс
+                await db.payments.create_index("payment_id", unique=True, sparse=True)
+                logger.info("✅ Новый sparse индекс payment_id создан")
+                logger.info("=" * 60)
+            else:
+                logger.info("✓ Индекс payment_id корректный (sparse), исправление не требуется")
+        else:
+            logger.info("⚠️ Индекс payment_id отсутствует, будет создан автоматически")
+    
+    except Exception as e:
+        logger.error(f"❌ Ошибка при исправлении индекса payment_id: {e}")
+        raise
+
+
 async def main():
     """Главная функция - запускает оба бота одновременно"""
     try:
         # Инициализация MongoDB (общая для обоих ботов)
         logger.info(f"Connecting to MongoDB: {config.MONGODB_URL}")
         await mongodb.connect(config.MONGODB_URL, config.MONGODB_DB_NAME)
+        
+        # КРИТИЧЕСКИ ВАЖНО: Исправляем индекс перед запуском
+        logger.info("Проверка и исправление индексов MongoDB...")
+        await fix_mongodb_index()
         
         # Логируем состояние данных
         from data import get_all_courses, get_all_consultations, get_all_guides, get_mini_course
