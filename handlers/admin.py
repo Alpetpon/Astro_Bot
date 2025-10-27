@@ -1882,7 +1882,7 @@ async def delete_lesson_confirm(callback: CallbackQuery):
         lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
         
         buttons = [
-            [InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"confirm_delete_{lesson_id}")],
+            [InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"confirm_delete_lesson_{lesson_id}")],
             [InlineKeyboardButton(text="❌ Отмена", callback_data=f"edit_lesson_{lesson_id}")]
         ]
         
@@ -1902,14 +1902,14 @@ async def delete_lesson_confirm(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("confirm_delete_"))
+@router.callback_query(F.data.startswith("confirm_delete_lesson_"))
 async def delete_lesson(callback: CallbackQuery):
     """Удаление урока"""
     if not is_admin(callback.from_user.id):
         await callback.answer("❌ Доступ запрещен", show_alert=True)
         return
     
-    lesson_id = int(callback.data.split("_")[2])
+    lesson_id = int(callback.data.split("_")[3])
     
     db: Session = get_db()
     try:
