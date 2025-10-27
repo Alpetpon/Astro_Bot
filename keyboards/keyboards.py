@@ -1,5 +1,6 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from typing import List, Optional
+from urllib.parse import quote
 
 
 def get_start_keyboard() -> InlineKeyboardMarkup:
@@ -285,11 +286,15 @@ def get_consultation_detail_keyboard(consultation_slug: str, show_navigation: bo
     
     buttons = []
     
-    # Кнопка записи - ведет в Telegram к астрологу
+    # Заготовленное сообщение для записи на консультацию
+    message_text = "Здравствуйте! Хочу записаться на консультацию."
+    encoded_text = quote(message_text)
+    
+    # Кнопка записи - ведет в Telegram к астрологу с заготовленным сообщением
     buttons.append([
         InlineKeyboardButton(
             text="✅ Записаться на консультацию", 
-            url=f"https://t.me/{config.CONSULTATION_TELEGRAM}"
+            url=f"https://t.me/{config.CONSULTATION_TELEGRAM}?text={encoded_text}"
         )
     ])
     
