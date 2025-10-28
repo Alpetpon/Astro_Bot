@@ -1,4 +1,5 @@
 import logging
+import html
 from datetime import datetime
 import re
 from aiogram import Router, F
@@ -213,16 +214,17 @@ async def process_email_and_create_payment(message: Message, state: FSMContext):
             "confirmation_url": payment_result['confirmation_url']
         })
         
-        # Формируем сообщение об оплате
+        # Формируем сообщение об оплате (HTML, чтобы email не ломал разметку)
         support_text = "✅ С сопровождением куратора" if tariff_with_support else "📚 Самостоятельное обучение"
         
         product_label = "Мини-курс" if product_type == 'mini_course' else "Курс"
-        text = f"💳 **Оплата {product_label.lower()}а**\n\n"
-        text += f"**{product_label}:** {product_name}\n"
-        text += f"**Тариф:** {tariff_name}\n"
-        text += f"**Формат:** {support_text}\n"
-        text += f"**Стоимость:** {tariff_price} ₽\n"
-        text += f"**Email для чека:** {email}\n\n"
+        safe_email = html.escape(email)
+        text = f"💳 <b>Оплата {product_label.lower()}а</b>\n\n"
+        text += f"<b>{product_label}:</b> {html.escape(product_name)}\n"
+        text += f"<b>Тариф:</b> {html.escape(tariff_name)}\n"
+        text += f"<b>Формат:</b> {support_text}\n"
+        text += f"<b>Стоимость:</b> {tariff_price} ₽\n"
+        text += f"<b>Email для чека:</b> <code>{safe_email}</code>\n\n"
         text += "• Нажмите кнопку «Оплатить» для перехода на страницу оплаты.\n"
         
         # Добавляем информацию для тарифов без обратной связи
@@ -237,7 +239,7 @@ async def process_email_and_create_payment(message: Message, state: FSMContext):
         sent_message = await message.answer(
             text,
             reply_markup=get_payment_keyboard(payment_result['confirmation_url'], str(payment.id), back_callback),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
         
         # Сохраняем chat_id и message_id для последующего редактирования
