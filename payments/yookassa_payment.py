@@ -61,10 +61,9 @@ class YooKassaPayment:
             "capture": True,
             "description": description,
             "metadata": payment_metadata,
-            # Указываем метод оплаты СБП (Система Быстрых Платежей)
-            "payment_method_data": {
-                "type": "sbp"
-            },
+            # Не указываем payment_method_data - ЮKassa автоматически покажет
+            # все доступные методы оплаты для вашего магазина:
+            # банковские карты, СБП (если подключен), ЮMoney, Google Pay, Apple Pay и др.
             "receipt": {
                 "customer": {
                     "email": customer_email or config.RECEIPT_EMAIL
