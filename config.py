@@ -80,6 +80,7 @@ class Config:
     # Значения из админ-панели имеют приоритет над этими
     WELCOME_VIDEO_FILE_ID = ''  # File ID приветственного видео
     ABOUT_ME_VIDEO_FILE_ID = ''  # File ID видео-интервью "Обо мне"
+    FREE_COURSE_ZET9_VIDEO_ID = ''  # File ID видео "Как установить ZET 9" для бесплатного курса
     
     # Тексты
     WELCOME_TEXT = """

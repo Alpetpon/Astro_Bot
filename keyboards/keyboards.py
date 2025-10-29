@@ -388,7 +388,15 @@ def get_back_to_admin_keyboard() -> InlineKeyboardMarkup:
     return keyboard
 
 
-def get_video_settings_keyboard(has_welcome_video: bool = False) -> InlineKeyboardMarkup:
+def get_back_to_free_course_keyboard() -> InlineKeyboardMarkup:
+    """Кнопка возврата к управлению бесплатным курсом"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад к бесплатному курсу", callback_data="manage_free_course")]
+    ])
+    return keyboard
+
+
+def get_video_settings_keyboard(has_welcome_video: bool = False, has_step3_photos: bool = False, has_step3_video: bool = False, has_final_message: bool = False) -> InlineKeyboardMarkup:
     """Клавиатура настроек видео"""
     buttons = []
     
@@ -403,6 +411,45 @@ def get_video_settings_keyboard(has_welcome_video: bool = False) -> InlineKeyboa
     else:
         buttons.append([
             InlineKeyboardButton(text="➕ Загрузить приветственное видео", callback_data="video_welcome_upload")
+        ])
+    
+    # Фото для шага 3 (Инструкция Sotis)
+    if has_step3_photos:
+        buttons.append([
+            InlineKeyboardButton(text="🔄 Заменить фото Шага 3", callback_data="video_step3_photos_upload")
+        ])
+        buttons.append([
+            InlineKeyboardButton(text="🗑 Удалить фото Шага 3", callback_data="video_step3_photos_delete")
+        ])
+    else:
+        buttons.append([
+            InlineKeyboardButton(text="➕ Загрузить фото Шага 3", callback_data="video_step3_photos_upload")
+        ])
+    
+    # Видео для шага 3
+    if has_step3_video:
+        buttons.append([
+            InlineKeyboardButton(text="🔄 Заменить видео Шага 3", callback_data="video_step3_video_upload")
+        ])
+        buttons.append([
+            InlineKeyboardButton(text="🗑 Удалить видео Шага 3", callback_data="video_step3_video_delete")
+        ])
+    else:
+        buttons.append([
+            InlineKeyboardButton(text="➕ Загрузить видео Шага 3", callback_data="video_step3_video_upload")
+        ])
+    
+    # Финальное сообщение
+    if has_final_message:
+        buttons.append([
+            InlineKeyboardButton(text="✏️ Изменить финальное сообщение", callback_data="free_course_final_message_edit")
+        ])
+        buttons.append([
+            InlineKeyboardButton(text="🗑 Удалить финальное сообщение", callback_data="free_course_final_message_delete")
+        ])
+    else:
+        buttons.append([
+            InlineKeyboardButton(text="✏️ Настроить финальное сообщение", callback_data="free_course_final_message_edit")
         ])
     
     # Кнопка назад

@@ -439,6 +439,14 @@ async def show_courses_management(callback: CallbackQuery):
         )
     else:
         buttons = []
+        
+        # Добавляем кнопку для бесплатного курса первой
+        buttons.append([InlineKeyboardButton(
+            text="🔮 Бесплатный курс",
+            callback_data="manage_free_course"
+        )])
+        
+        # Затем платные курсы
         for course in courses:
             buttons.append([InlineKeyboardButton(
                 text=f"{course.get('emoji', '📚')} {course['name']}",
@@ -458,6 +466,125 @@ async def show_courses_management(callback: CallbackQuery):
             reply_markup=keyboard
         )
     
+    await callback.answer()
+
+
+@router.callback_query(F.data == "manage_free_course")
+async def manage_free_course(callback: CallbackQuery):
+    """Управление бесплатным курсом"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    from utils.bot_settings import get_setting
+    
+    # Проверяем наличие текстов для всех шагов
+    step1_text = await get_setting("free_course_step1_text")
+    step2_text = await get_setting("free_course_step2_text")
+    step3_text = await get_setting("free_course_step3_text")
+    step3_photos = await get_setting("free_course_step3_photos")
+    step3_video = await get_setting("free_course_step3_video")
+    final_message = await get_setting("free_course_final_message")
+    
+    has_step1_text = bool(step1_text)
+    has_step2_text = bool(step2_text)
+    has_step3_text = bool(step3_text)
+    has_step3_photos = bool(step3_photos)
+    has_step3_video = bool(step3_video)
+    has_final_message = bool(final_message)
+    
+    text = "🔮 <b>Управление бесплатным курсом</b>\n\n"
+    text += "<b>Структура курса:</b>\n"
+    text += "1️⃣ Шаг 1: Вступление\n"
+    text += "2️⃣ Шаг 2: Программы для построения карты\n"
+    text += "3️⃣ Шаг 3: Инструкция по Sotis Online\n"
+    text += "4️⃣ Финальное сообщение (после кнопки 'Получилось')\n\n"
+    
+    text += "<b>Текущие настройки:</b>\n\n"
+    
+    text += "<b>Шаг 1 (Вступление):</b>\n"
+    text += f"{'✅' if has_step1_text else '❌'} Текст {'настроен' if has_step1_text else 'стандартный'}\n\n"
+    
+    text += "<b>Шаг 2 (Программы):</b>\n"
+    text += f"{'✅' if has_step2_text else '❌'} Текст {'настроен' if has_step2_text else 'стандартный'}\n\n"
+    
+    text += "<b>Шаг 3 (Инструкция Sotis):</b>\n"
+    text += f"{'✅' if has_step3_text else '❌'} Текст {'настроен' if has_step3_text else 'стандартный'}\n"
+    
+    if has_step3_photos:
+        import json
+        try:
+            photos = json.loads(step3_photos)
+            text += f"✅ Фото: {len(photos)} шт.\n"
+        except:
+            text += "✅ Фото загружено\n"
+    else:
+        text += "❌ Фото не загружено\n"
+    
+    if has_step3_video:
+        text += "✅ Видео загружено\n\n"
+    else:
+        text += "❌ Видео не загружено\n\n"
+    
+    text += "<b>Финальное сообщение:</b>\n"
+    text += f"{'✅' if has_final_message else '❌'} Текст {'настроен' if has_final_message else 'стандартный'}\n"
+    
+    text += "\n💡 Выберите, что хотите настроить:"
+    
+    buttons = []
+    
+    # Шаг 1 - текст
+    buttons.append([InlineKeyboardButton(
+        text=f"✏️ {'Изменить' if has_step1_text else 'Настроить'} текст Шага 1",
+        callback_data="free_course_step1_edit"
+    )])
+    if has_step1_text:
+        buttons.append([InlineKeyboardButton(text="🗑 Сбросить текст Шага 1", callback_data="free_course_step1_delete")])
+    
+    # Шаг 2 - текст
+    buttons.append([InlineKeyboardButton(
+        text=f"✏️ {'Изменить' if has_step2_text else 'Настроить'} текст Шага 2",
+        callback_data="free_course_step2_edit"
+    )])
+    if has_step2_text:
+        buttons.append([InlineKeyboardButton(text="🗑 Сбросить текст Шага 2", callback_data="free_course_step2_delete")])
+    
+    # Шаг 3 - текст
+    buttons.append([InlineKeyboardButton(
+        text=f"✏️ {'Изменить' if has_step3_text else 'Настроить'} текст Шага 3",
+        callback_data="free_course_step3_edit"
+    )])
+    if has_step3_text:
+        buttons.append([InlineKeyboardButton(text="🗑 Сбросить текст Шага 3", callback_data="free_course_step3_delete")])
+    
+    # Шаг 3 - фото
+    if has_step3_photos:
+        buttons.append([InlineKeyboardButton(text="🔄 Заменить фото Шага 3", callback_data="video_step3_photos_upload")])
+        buttons.append([InlineKeyboardButton(text="🗑 Удалить фото Шага 3", callback_data="video_step3_photos_delete")])
+    else:
+        buttons.append([InlineKeyboardButton(text="➕ Загрузить фото Шага 3", callback_data="video_step3_photos_upload")])
+    
+    # Шаг 3 - видео
+    if has_step3_video:
+        buttons.append([InlineKeyboardButton(text="🔄 Заменить видео Шага 3", callback_data="video_step3_video_upload")])
+        buttons.append([InlineKeyboardButton(text="🗑 Удалить видео Шага 3", callback_data="video_step3_video_delete")])
+    else:
+        buttons.append([InlineKeyboardButton(text="➕ Загрузить видео Шага 3", callback_data="video_step3_video_upload")])
+    
+    # Финальное сообщение
+    buttons.append([InlineKeyboardButton(
+        text=f"✏️ {'Изменить' if has_final_message else 'Настроить'} финальное сообщение",
+        callback_data="free_course_final_message_edit"
+    )])
+    if has_final_message:
+        buttons.append([InlineKeyboardButton(text="🗑 Сбросить финальное сообщение", callback_data="free_course_final_message_delete")])
+    
+    # Кнопка назад
+    buttons.append([InlineKeyboardButton(text="◀️ Назад к курсам", callback_data="courses_management")])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+    await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
 
 

@@ -301,6 +301,12 @@ async def show_my_course(callback: CallbackQuery):
             
             for module in modules:
                 module_title = module.get('title', 'Модуль')
+                is_free = module.get('is_free', False)
+                
+                # Бесплатные модули пропускаем в списке (они доступны через основной бот)
+                if is_free:
+                    continue
+                
                 text += f"▫️ {module_title}\n\n"
                 
                 buttons.append([InlineKeyboardButton(
@@ -348,18 +354,23 @@ async def show_module(callback: CallbackQuery):
             await callback.answer("Ошибка: пользователь не найден", show_alert=True)
             return
         
-        payments = await payment_repo.get_user_payments(user.id)
-        payment = next((p for p in payments if p.course_slug == course_slug and p.status == 'succeeded' and p.product_type in ['course', 'mini_course']), None)
-        
-        if not payment:
-            await callback.answer("У вас нет доступа к этому курсу", show_alert=True)
-            return
-        
         module = get_module_by_id(course_slug, module_id)
         
         if not module:
             await callback.answer("Модуль не найден", show_alert=True)
             return
+        
+        # Проверяем, является ли модуль бесплатным
+        is_free = module.get('is_free', False)
+        
+        # Если модуль не бесплатный, проверяем наличие оплаты
+        if not is_free:
+            payments = await payment_repo.get_user_payments(user.id)
+            payment = next((p for p in payments if p.course_slug == course_slug and p.status == 'succeeded' and p.product_type in ['course', 'mini_course']), None)
+            
+            if not payment:
+                await callback.answer("У вас нет доступа к этому курсу", show_alert=True)
+                return
         
         course = get_course_by_slug(course_slug)
         
@@ -440,18 +451,24 @@ async def show_lesson(callback: CallbackQuery):
             await callback.answer("Ошибка: пользователь не найден", show_alert=True)
             return
         
-        payments = await payment_repo.get_user_payments(user.id)
-        payment = next((p for p in payments if p.course_slug == course_slug and p.status == 'succeeded' and p.product_type in ['course', 'mini_course']), None)
-        
-        if not payment:
-            await callback.answer("У вас нет доступа к этому курсу", show_alert=True)
-            return
-        
         lesson = get_lesson_by_id(course_slug, module_id, lesson_id)
         
         if not lesson:
             await callback.answer("Урок не найден", show_alert=True)
             return
+        
+        # Проверяем, является ли модуль бесплатным
+        module = get_module_by_id(course_slug, module_id)
+        is_free = module.get('is_free', False) if module else False
+        
+        # Если модуль не бесплатный, проверяем наличие оплаты
+        if not is_free:
+            payments = await payment_repo.get_user_payments(user.id)
+            payment = next((p for p in payments if p.course_slug == course_slug and p.status == 'succeeded' and p.product_type in ['course', 'mini_course']), None)
+            
+            if not payment:
+                await callback.answer("У вас нет доступа к этому курсу", show_alert=True)
+                return
         
         lesson_type = lesson.get('type', 'video')
         type_emoji = {
@@ -564,18 +581,24 @@ async def download_lecture(callback: CallbackQuery):
             await callback.answer("Ошибка: пользователь не найден", show_alert=True)
             return
         
-        payments = await payment_repo.get_user_payments(user.id)
-        payment = next((p for p in payments if p.course_slug == course_slug and p.status == 'succeeded' and p.product_type in ['course', 'mini_course']), None)
-        
-        if not payment:
-            await callback.answer("У вас нет доступа к этому курсу", show_alert=True)
-            return
-        
         lesson = get_lesson_by_id(course_slug, module_id, lesson_id)
         
         if not lesson:
             await callback.answer("Урок не найден", show_alert=True)
             return
+        
+        # Проверяем, является ли модуль бесплатным
+        module = get_module_by_id(course_slug, module_id)
+        is_free = module.get('is_free', False) if module else False
+        
+        # Если модуль не бесплатный, проверяем наличие оплаты
+        if not is_free:
+            payments = await payment_repo.get_user_payments(user.id)
+            payment = next((p for p in payments if p.course_slug == course_slug and p.status == 'succeeded' and p.product_type in ['course', 'mini_course']), None)
+            
+            if not payment:
+                await callback.answer("У вас нет доступа к этому курсу", show_alert=True)
+                return
         
         lecture_file_id = lesson.get('lecture_file_id', '')
         
