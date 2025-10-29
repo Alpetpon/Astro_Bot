@@ -22,8 +22,8 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🎥 Вебинар", callback_data="webinar")],
         [InlineKeyboardButton(text="💫 Вступить в закрытый клуб", callback_data="subscription_channel")],
         [InlineKeyboardButton(text="🔮 Консультации", callback_data="consultations")],
-        [InlineKeyboardButton(text="🏠 Мой кабинет", callback_data="my_cabinet")],
-        [InlineKeyboardButton(text="⭐️ Отзывы", callback_data="reviews")]
+        [InlineKeyboardButton(text="⭐️ Отзывы", callback_data="reviews")],
+        [InlineKeyboardButton(text="🏠 Мой кабинет", callback_data="my_cabinet")]
     ])
     return keyboard
 
