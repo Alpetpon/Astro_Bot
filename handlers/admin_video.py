@@ -14,16 +14,25 @@ from utils.bot_settings import (
 
 router = Router()
 
-# Ключи для хранения видео и фото в БД
-FREE_COURSE_ZET9_VIDEO_KEY = "free_course_zet9_video"
-FREE_COURSE_STEP3_PHOTOS_KEY = "free_course_step3_photos"
-FREE_COURSE_STEP3_VIDEO_KEY = "free_course_step3_video"
-FREE_COURSE_FINAL_MESSAGE_KEY = "free_course_final_message"
-
-# Ключи для текстов шагов
+# Ключи для текстов шагов (5 шагов)
 FREE_COURSE_STEP1_TEXT_KEY = "free_course_step1_text"
 FREE_COURSE_STEP2_TEXT_KEY = "free_course_step2_text"
 FREE_COURSE_STEP3_TEXT_KEY = "free_course_step3_text"
+FREE_COURSE_STEP4_TEXT_KEY = "free_course_step4_text"
+FREE_COURSE_STEP5_TEXT_KEY = "free_course_step5_text"
+
+# Ключи для медиа шагов
+FREE_COURSE_STEP3_VIDEO_KEY = "free_course_step3_video"
+FREE_COURSE_STEP4_PHOTOS_KEY = "free_course_step4_photos"
+FREE_COURSE_STEP5_PHOTO_KEY = "free_course_step5_photo"
+
+# Старые ключи (для обратной совместимости)
+FREE_COURSE_ZET9_VIDEO_KEY = "free_course_zet9_video"  # Alias для STEP3_VIDEO
+FREE_COURSE_STEP3_PHOTOS_KEY = "free_course_step3_photos"  # Старый ключ, больше не используется
+
+# Ключи для финального сообщения
+FREE_COURSE_FINAL_MESSAGE_KEY = "free_course_final_message"
+FREE_COURSE_FINAL_PHOTO_KEY = "free_course_final_photo"
 
 
 class VideoUpload(StatesGroup):
@@ -33,9 +42,16 @@ class VideoUpload(StatesGroup):
     waiting_for_step3_photos = State()
     waiting_for_step3_video = State()
     waiting_for_final_message = State()
+    # Состояния для текстов
     waiting_for_step1_text = State()
     waiting_for_step2_text = State()
     waiting_for_step3_text = State()
+    waiting_for_step4_text = State()
+    waiting_for_step5_text = State()
+    # Состояния для медиа шагов
+    waiting_for_step4_photos = State()
+    waiting_for_step5_photo = State()
+    waiting_for_final_photo = State()
 
 
 @router.callback_query(F.data == "admin_video_settings")
@@ -737,6 +753,352 @@ async def delete_step3_text(callback: CallbackQuery):
     
     if success:
         await callback.answer("✅ Текст Шага 3 сброшен")
+        from handlers.admin import manage_free_course
+        await manage_free_course(callback)
+    else:
+        await callback.answer("❌ Ошибка при удалении", show_alert=True)
+
+
+# ШАГ 4
+@router.callback_query(F.data == "free_course_step4_edit")
+async def edit_step4_text(callback: CallbackQuery, state: FSMContext):
+    """Начать редактирование текста Шага 4"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    current_text = await get_setting(FREE_COURSE_STEP4_TEXT_KEY)
+    
+    text = "✏️ <b>Редактирование текста Шага 4</b>\n\n"
+    
+    if current_text:
+        text += f"📝 <b>Текущий текст:</b>\n<code>{current_text[:300]}...</code>\n\n" if len(current_text) > 300 else f"📝 <b>Текущий текст:</b>\n<code>{current_text}</code>\n\n"
+    else:
+        text += "📝 Сейчас используется стандартный текст\n\n"
+    
+    text += "Отправьте новый текст для Шага 4\n\n"
+    text += "💡 Вы можете использовать эмодзи и форматирование\n"
+    text += "Отправьте /cancel для отмены"
+    
+    await callback.message.edit_text(text, reply_markup=get_back_to_free_course_keyboard())
+    await state.set_state(VideoUpload.waiting_for_step4_text)
+    await callback.answer()
+
+
+@router.message(VideoUpload.waiting_for_step4_text, F.text)
+async def save_step4_text(message: Message, state: FSMContext):
+    """Сохранить текст Шага 4"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    if message.text.startswith('/'):
+        return
+    
+    success = await set_setting(FREE_COURSE_STEP4_TEXT_KEY, message.text)
+    
+    if success:
+        preview = message.text[:200] + "..." if len(message.text) > 200 else message.text
+        await message.answer(
+            f"✅ <b>Текст Шага 4 успешно сохранен!</b>\n\n"
+            f"📝 <b>Предпросмотр:</b>\n{preview}",
+            reply_markup=get_back_to_free_course_keyboard()
+        )
+    else:
+        await message.answer(
+            "❌ <b>Ошибка при сохранении</b>\n\nПопробуйте еще раз",
+            reply_markup=get_back_to_admin_keyboard()
+        )
+    
+    await state.clear()
+
+
+@router.callback_query(F.data == "free_course_step4_delete")
+async def delete_step4_text(callback: CallbackQuery):
+    """Удалить текст Шага 4"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    success = await delete_setting(FREE_COURSE_STEP4_TEXT_KEY)
+    
+    if success:
+        await callback.answer("✅ Текст Шага 4 сброшен")
+        from handlers.admin import manage_free_course
+        await manage_free_course(callback)
+    else:
+        await callback.answer("❌ Ошибка при удалении", show_alert=True)
+
+
+# ШАГ 5
+@router.callback_query(F.data == "free_course_step5_edit")
+async def edit_step5_text(callback: CallbackQuery, state: FSMContext):
+    """Начать редактирование текста Шага 5"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    current_text = await get_setting(FREE_COURSE_STEP5_TEXT_KEY)
+    
+    text = "✏️ <b>Редактирование текста Шага 5</b>\n\n"
+    
+    if current_text:
+        text += f"📝 <b>Текущий текст:</b>\n<code>{current_text[:300]}...</code>\n\n" if len(current_text) > 300 else f"📝 <b>Текущий текст:</b>\n<code>{current_text}</code>\n\n"
+    else:
+        text += "📝 Сейчас используется стандартный текст\n\n"
+    
+    text += "Отправьте новый текст для Шага 5\n\n"
+    text += "💡 Вы можете использовать эмодзи и форматирование\n"
+    text += "Отправьте /cancel для отмены"
+    
+    await callback.message.edit_text(text, reply_markup=get_back_to_free_course_keyboard())
+    await state.set_state(VideoUpload.waiting_for_step5_text)
+    await callback.answer()
+
+
+@router.message(VideoUpload.waiting_for_step5_text, F.text)
+async def save_step5_text(message: Message, state: FSMContext):
+    """Сохранить текст Шага 5"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    if message.text.startswith('/'):
+        return
+    
+    success = await set_setting(FREE_COURSE_STEP5_TEXT_KEY, message.text)
+    
+    if success:
+        preview = message.text[:200] + "..." if len(message.text) > 200 else message.text
+        await message.answer(
+            f"✅ <b>Текст Шага 5 успешно сохранен!</b>\n\n"
+            f"📝 <b>Предпросмотр:</b>\n{preview}",
+            reply_markup=get_back_to_free_course_keyboard()
+        )
+    else:
+        await message.answer(
+            "❌ <b>Ошибка при сохранении</b>\n\nПопробуйте еще раз",
+            reply_markup=get_back_to_admin_keyboard()
+        )
+    
+    await state.clear()
+
+
+@router.callback_query(F.data == "free_course_step5_delete")
+async def delete_step5_text(callback: CallbackQuery):
+    """Удалить текст Шага 5"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    success = await delete_setting(FREE_COURSE_STEP5_TEXT_KEY)
+    
+    if success:
+        await callback.answer("✅ Текст Шага 5 сброшен")
+        from handlers.admin import manage_free_course
+        await manage_free_course(callback)
+    else:
+        await callback.answer("❌ Ошибка при удалении", show_alert=True)
+
+
+# ===== ФОТО ДЛЯ ШАГА 4 (НЕСКОЛЬКО ФОТО) =====
+
+@router.callback_query(F.data == "free_course_step4_photos_upload")
+async def upload_step4_photos(callback: CallbackQuery, state: FSMContext):
+    """Начать загрузку фото для шага 4"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    await callback.message.edit_text(
+        "📤 <b>Загрузка фото для Шага 4</b>\n\n"
+        "Отправьте фото (можно несколько). Они будут показаны пользователям группой.\n\n"
+        "После загрузки всех фото отправьте /done\n"
+        "Отправьте /cancel для отмены",
+        reply_markup=get_back_to_free_course_keyboard()
+    )
+    
+    await state.update_data(photos=[])
+    await state.set_state(VideoUpload.waiting_for_step4_photos)
+    await callback.answer()
+
+
+@router.message(VideoUpload.waiting_for_step4_photos, F.photo)
+async def save_step4_photo(message: Message, state: FSMContext):
+    """Сохранить фото для шага 4"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    file_id = message.photo[-1].file_id
+    data = await state.get_data()
+    photos = data.get('photos', [])
+    photos.append(file_id)
+    await state.update_data(photos=photos)
+    
+    await message.answer(f"✅ Фото {len(photos)} добавлено!\n\nОтправьте еще фото или /done для завершения")
+
+
+@router.message(VideoUpload.waiting_for_step4_photos, F.text == "/done")
+async def finish_step4_photos(message: Message, state: FSMContext):
+    """Завершить загрузку фото для шага 4"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    data = await state.get_data()
+    photos = data.get('photos', [])
+    
+    if not photos:
+        await message.answer("❌ Вы не загрузили ни одного фото\n\nОтправьте фото или /cancel для отмены")
+        return
+    
+    import json
+    photos_json = json.dumps(photos)
+    success = await set_setting(FREE_COURSE_STEP4_PHOTOS_KEY, photos_json)
+    
+    if success:
+        await message.answer(
+            f"✅ <b>Успешно сохранено {len(photos)} фото!</b>\n\n"
+            "Теперь они будут показываться на 4-м шаге бесплатного курса",
+            reply_markup=get_back_to_free_course_keyboard()
+        )
+    else:
+        await message.answer(
+            "❌ <b>Ошибка при сохранении фото</b>\n\nПопробуйте еще раз",
+            reply_markup=get_back_to_admin_keyboard()
+        )
+    
+    await state.clear()
+
+
+@router.callback_query(F.data == "free_course_step4_photos_delete")
+async def delete_step4_photos(callback: CallbackQuery):
+    """Удалить фото шага 4"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    success = await delete_setting(FREE_COURSE_STEP4_PHOTOS_KEY)
+    
+    if success:
+        await callback.answer("✅ Фото удалены")
+        from handlers.admin import manage_free_course
+        await manage_free_course(callback)
+    else:
+        await callback.answer("❌ Ошибка при удалении", show_alert=True)
+
+
+# ===== ФОТО ДЛЯ ШАГА 5 (ОДНО ФОТО) =====
+
+@router.callback_query(F.data == "free_course_step5_photo_upload")
+async def upload_step5_photo(callback: CallbackQuery, state: FSMContext):
+    """Начать загрузку фото для шага 5"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    await callback.message.edit_text(
+        "📤 <b>Загрузка фото для Шага 5</b>\n\n"
+        "Отправьте одно фото для 5-го шага\n\n"
+        "Отправьте /cancel для отмены",
+        reply_markup=get_back_to_free_course_keyboard()
+    )
+    await state.set_state(VideoUpload.waiting_for_step5_photo)
+    await callback.answer()
+
+
+@router.message(VideoUpload.waiting_for_step5_photo, F.photo)
+async def save_step5_photo(message: Message, state: FSMContext):
+    """Сохранить фото для шага 5"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    file_id = message.photo[-1].file_id
+    success = await set_setting(FREE_COURSE_STEP5_PHOTO_KEY, file_id)
+    
+    if success:
+        await message.answer(
+            "✅ <b>Фото успешно сохранено!</b>\n\n"
+            "Теперь это фото будет показываться на 5-м шаге бесплатного курса",
+            reply_markup=get_back_to_free_course_keyboard()
+        )
+    else:
+        await message.answer(
+            "❌ <b>Ошибка при сохранении фото</b>\n\nПопробуйте еще раз",
+            reply_markup=get_back_to_admin_keyboard()
+        )
+    
+    await state.clear()
+
+
+@router.callback_query(F.data == "free_course_step5_photo_delete")
+async def delete_step5_photo(callback: CallbackQuery):
+    """Удалить фото шага 5"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    success = await delete_setting(FREE_COURSE_STEP5_PHOTO_KEY)
+    
+    if success:
+        await callback.answer("✅ Фото удалено")
+        from handlers.admin import manage_free_course
+        await manage_free_course(callback)
+    else:
+        await callback.answer("❌ Ошибка при удалении", show_alert=True)
+
+
+# ===== ФОТО ДЛЯ ФИНАЛЬНОГО СООБЩЕНИЯ =====
+
+@router.callback_query(F.data == "free_course_final_photo_upload")
+async def upload_final_photo(callback: CallbackQuery, state: FSMContext):
+    """Начать загрузку фото для финального сообщения"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    await callback.message.edit_text(
+        "📤 <b>Загрузка фото для финального сообщения</b>\n\n"
+        "Отправьте одно фото для финального сообщения (после кнопки 'Получилось')\n\n"
+        "Отправьте /cancel для отмены",
+        reply_markup=get_back_to_free_course_keyboard()
+    )
+    await state.set_state(VideoUpload.waiting_for_final_photo)
+    await callback.answer()
+
+
+@router.message(VideoUpload.waiting_for_final_photo, F.photo)
+async def save_final_photo(message: Message, state: FSMContext):
+    """Сохранить фото для финального сообщения"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    file_id = message.photo[-1].file_id
+    success = await set_setting(FREE_COURSE_FINAL_PHOTO_KEY, file_id)
+    
+    if success:
+        await message.answer(
+            "✅ <b>Фото успешно сохранено!</b>\n\n"
+            "Теперь это фото будет показываться в финальном сообщении",
+            reply_markup=get_back_to_free_course_keyboard()
+        )
+    else:
+        await message.answer(
+            "❌ <b>Ошибка при сохранении фото</b>\n\nПопробуйте еще раз",
+            reply_markup=get_back_to_admin_keyboard()
+        )
+    
+    await state.clear()
+
+
+@router.callback_query(F.data == "free_course_final_photo_delete")
+async def delete_final_photo(callback: CallbackQuery):
+    """Удалить фото финального сообщения"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        return
+    
+    success = await delete_setting(FREE_COURSE_FINAL_PHOTO_KEY)
+    
+    if success:
+        await callback.answer("✅ Фото удалено")
         from handlers.admin import manage_free_course
         await manage_free_course(callback)
     else:

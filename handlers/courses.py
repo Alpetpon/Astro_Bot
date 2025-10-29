@@ -385,10 +385,10 @@ async def show_free_natal_chart_step_3(callback: CallbackQuery):
     else:
         text = custom_text
     
-    # Кнопка "Получилось" и назад
+    # Кнопки навигации
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Получилось", callback_data="natal_chart_done")],
-        [InlineKeyboardButton(text="◀️ Назад", callback_data="free_natal_chart_step_2")]
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="free_natal_chart_step_2"),
+         InlineKeyboardButton(text="Далее ▶️", callback_data="free_natal_chart_step_4")]
     ])
     
     try:
@@ -488,6 +488,181 @@ async def show_free_natal_chart_step_3(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.callback_query(F.data == "free_natal_chart_step_4")
+async def show_free_natal_chart_step_4(callback: CallbackQuery):
+    """Показать бесплатный блок - Шаг 4: Текст + несколько фото"""
+    db = await get_db()
+    user_repo = UserRepository(db)
+    await user_repo.update_activity(callback.from_user.id)
+    
+    # Пытаемся получить кастомный текст из БД
+    from utils.bot_settings import get_setting
+    custom_text = await get_setting("free_course_step4_text")
+    
+    # Если текст не настроен, используем дефолтный
+    if not custom_text:
+        text = """📚 <b>Шаг 4: Дополнительные материалы</b>
+
+Здесь вы найдете полезные материалы и советы для работы с натальной картой.
+
+После изучения материалов переходите к следующему шагу."""
+    else:
+        text = custom_text
+    
+    # Кнопки навигации
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="free_natal_chart_step_3"),
+         InlineKeyboardButton(text="Далее ▶️", callback_data="free_natal_chart_step_5")]
+    ])
+    
+    try:
+        # Проверяем наличие фото
+        photos_json = await get_setting("free_course_step4_photos")
+        
+        # Удаляем предыдущее сообщение
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        
+        if photos_json:
+            import json
+            try:
+                photos = json.loads(photos_json)
+                if photos and len(photos) > 0:
+                    # Если одно фото
+                    if len(photos) == 1:
+                        await callback.bot.send_photo(
+                            chat_id=callback.message.chat.id,
+                            photo=photos[0],
+                            caption=text,
+                            reply_markup=keyboard
+                        )
+                    # Если несколько фото - отправляем группой
+                    else:
+                        from aiogram.types import InputMediaPhoto
+                        media_group = []
+                        for i, photo_id in enumerate(photos[:10]):  # Максимум 10 фото
+                            if i == 0:
+                                media_group.append(InputMediaPhoto(media=photo_id, caption=text))
+                            else:
+                                media_group.append(InputMediaPhoto(media=photo_id))
+                        
+                        await callback.bot.send_media_group(
+                            chat_id=callback.message.chat.id,
+                            media=media_group
+                        )
+                        # Отправляем кнопки отдельным сообщением
+                        await callback.bot.send_message(
+                            chat_id=callback.message.chat.id,
+                            text="Выберите действие:",
+                            reply_markup=keyboard
+                        )
+                else:
+                    # Если массив пустой - просто текст
+                    await callback.bot.send_message(
+                        chat_id=callback.message.chat.id,
+                        text=text,
+                        reply_markup=keyboard
+                    )
+            except:
+                # Если ошибка парсинга - просто текст
+                await callback.bot.send_message(
+                    chat_id=callback.message.chat.id,
+                    text=text,
+                    reply_markup=keyboard
+                )
+        else:
+            # Если нет фото - просто текст
+            await callback.bot.send_message(
+                chat_id=callback.message.chat.id,
+                text=text,
+                reply_markup=keyboard
+            )
+    except Exception as e:
+        # Если ошибка - показываем текст
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        
+        await callback.bot.send_message(
+            chat_id=callback.message.chat.id,
+            text=text,
+            reply_markup=keyboard
+        )
+    
+    await callback.answer()
+
+
+@router.callback_query(F.data == "free_natal_chart_step_5")
+async def show_free_natal_chart_step_5(callback: CallbackQuery):
+    """Показать бесплатный блок - Шаг 5: Текст + одно фото"""
+    db = await get_db()
+    user_repo = UserRepository(db)
+    await user_repo.update_activity(callback.from_user.id)
+    
+    # Пытаемся получить кастомный текст из БД
+    from utils.bot_settings import get_setting
+    custom_text = await get_setting("free_course_step5_text")
+    
+    # Если текст не настроен, используем дефолтный
+    if not custom_text:
+        text = """🎯 <b>Шаг 5: Подсказки по символам</b>
+
+Важные символы и их значения в натальной карте.
+
+Это поможет вам лучше ориентироваться при чтении карты."""
+    else:
+        text = custom_text
+    
+    # Кнопка "Получилось" и назад
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Получилось", callback_data="natal_chart_done")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="free_natal_chart_step_4")]
+    ])
+    
+    try:
+        # Проверяем наличие фото
+        photo_file_id = await get_setting("free_course_step5_photo")
+        
+        # Удаляем предыдущее сообщение
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        
+        if photo_file_id:
+            # Если есть фото - отправляем его с текстом
+            await callback.bot.send_photo(
+                chat_id=callback.message.chat.id,
+                photo=photo_file_id,
+                caption=text,
+                reply_markup=keyboard
+            )
+        else:
+            # Если нет фото - просто текст
+            await callback.bot.send_message(
+                chat_id=callback.message.chat.id,
+                text=text,
+                reply_markup=keyboard
+            )
+    except Exception as e:
+        # Если ошибка - показываем текст
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        
+        await callback.bot.send_message(
+            chat_id=callback.message.chat.id,
+            text=text,
+            reply_markup=keyboard
+        )
+    
+    await callback.answer()
+
+
 @router.callback_query(F.data == "natal_chart_done")
 async def natal_chart_done(callback: CallbackQuery):
     """Обработчик кнопки 'Получилось' - показываем три пути"""
@@ -524,13 +699,33 @@ async def natal_chart_done(callback: CallbackQuery):
          InlineKeyboardButton(text="🏠 В меню", callback_data="main_menu")]
     ])
     
+    # Проверяем наличие фото для финального сообщения
+    photo_file_id = await get_setting("free_course_final_photo")
+    
     try:
-        await callback.message.edit_text(
-            text,
-            reply_markup=keyboard,
-            parse_mode="Markdown"
-        )
+        # Удаляем предыдущее сообщение
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        
+        if photo_file_id:
+            # Если есть фото - отправляем его с текстом
+            await callback.bot.send_photo(
+                chat_id=callback.message.chat.id,
+                photo=photo_file_id,
+                caption=text,
+                reply_markup=keyboard
+            )
+        else:
+            # Если нет фото - просто текст
+            await callback.bot.send_message(
+                chat_id=callback.message.chat.id,
+                text=text,
+                reply_markup=keyboard
+            )
     except Exception:
+        # Если ошибка - показываем текст
         try:
             await callback.message.delete()
         except Exception:
@@ -539,8 +734,7 @@ async def natal_chart_done(callback: CallbackQuery):
         await callback.bot.send_message(
             chat_id=callback.message.chat.id,
             text=text,
-            reply_markup=keyboard,
-            parse_mode="Markdown"
+            reply_markup=keyboard
         )
     
     await callback.answer()

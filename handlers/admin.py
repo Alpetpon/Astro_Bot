@@ -478,27 +478,41 @@ async def manage_free_course(callback: CallbackQuery):
     
     from utils.bot_settings import get_setting
     
-    # Проверяем наличие текстов для всех шагов
+    # Проверяем наличие текстов для всех 5 шагов
     step1_text = await get_setting("free_course_step1_text")
     step2_text = await get_setting("free_course_step2_text")
     step3_text = await get_setting("free_course_step3_text")
-    step3_photos = await get_setting("free_course_step3_photos")
+    step4_text = await get_setting("free_course_step4_text")
+    step5_text = await get_setting("free_course_step5_text")
+    
+    # Медиа для шагов
     step3_video = await get_setting("free_course_step3_video")
+    step4_photos = await get_setting("free_course_step4_photos")
+    step5_photo = await get_setting("free_course_step5_photo")
+    
+    # Финальное сообщение
     final_message = await get_setting("free_course_final_message")
+    final_photo = await get_setting("free_course_final_photo")
     
     has_step1_text = bool(step1_text)
     has_step2_text = bool(step2_text)
     has_step3_text = bool(step3_text)
-    has_step3_photos = bool(step3_photos)
+    has_step4_text = bool(step4_text)
+    has_step5_text = bool(step5_text)
     has_step3_video = bool(step3_video)
+    has_step4_photos = bool(step4_photos)
+    has_step5_photo = bool(step5_photo)
     has_final_message = bool(final_message)
+    has_final_photo = bool(final_photo)
     
     text = "🔮 <b>Управление бесплатным курсом</b>\n\n"
     text += "<b>Структура курса:</b>\n"
-    text += "1️⃣ Шаг 1: Вступление\n"
-    text += "2️⃣ Шаг 2: Программы для построения карты\n"
-    text += "3️⃣ Шаг 3: Инструкция по Sotis Online\n"
-    text += "4️⃣ Финальное сообщение (после кнопки 'Получилось')\n\n"
+    text += "1️⃣ Шаг 1: Вступление (текст)\n"
+    text += "2️⃣ Шаг 2: Программы (текст)\n"
+    text += "3️⃣ Шаг 3: Инструкция (текст + видео)\n"
+    text += "4️⃣ Шаг 4: текст + несколько фото\n"
+    text += "5️⃣ Шаг 5: текст + фото\n"
+    text += "6️⃣ Финальное сообщение (текст + фото)\n\n"
     
     text += "<b>Текущие настройки:</b>\n\n"
     
@@ -508,26 +522,29 @@ async def manage_free_course(callback: CallbackQuery):
     text += "<b>Шаг 2 (Программы):</b>\n"
     text += f"{'✅' if has_step2_text else '❌'} Текст {'настроен' if has_step2_text else 'стандартный'}\n\n"
     
-    text += "<b>Шаг 3 (Инструкция Sotis):</b>\n"
+    text += "<b>Шаг 3 (Инструкция + видео):</b>\n"
     text += f"{'✅' if has_step3_text else '❌'} Текст {'настроен' if has_step3_text else 'стандартный'}\n"
+    text += f"{'✅' if has_step3_video else '❌'} Видео {'загружено' if has_step3_video else 'не загружено'}\n\n"
     
-    if has_step3_photos:
+    text += "<b>Шаг 4 (Несколько фото):</b>\n"
+    text += f"{'✅' if has_step4_text else '❌'} Текст {'настроен' if has_step4_text else 'стандартный'}\n"
+    if has_step4_photos:
         import json
         try:
-            photos = json.loads(step3_photos)
-            text += f"✅ Фото: {len(photos)} шт.\n"
+            photos = json.loads(step4_photos)
+            text += f"✅ Фото: {len(photos)} шт.\n\n"
         except:
-            text += "✅ Фото загружено\n"
+            text += "✅ Фото загружено\n\n"
     else:
-        text += "❌ Фото не загружено\n"
+        text += "❌ Фото не загружено\n\n"
     
-    if has_step3_video:
-        text += "✅ Видео загружено\n\n"
-    else:
-        text += "❌ Видео не загружено\n\n"
+    text += "<b>Шаг 5 (Одно фото):</b>\n"
+    text += f"{'✅' if has_step5_text else '❌'} Текст {'настроен' if has_step5_text else 'стандартный'}\n"
+    text += f"{'✅' if has_step5_photo else '❌'} Фото {'загружено' if has_step5_photo else 'не загружено'}\n\n"
     
     text += "<b>Финальное сообщение:</b>\n"
     text += f"{'✅' if has_final_message else '❌'} Текст {'настроен' if has_final_message else 'стандартный'}\n"
+    text += f"{'✅' if has_final_photo else '❌'} Фото {'загружено' if has_final_photo else 'не загружено'}\n"
     
     text += "\n💡 Выберите, что хотите настроить:"
     
@@ -557,13 +574,6 @@ async def manage_free_course(callback: CallbackQuery):
     if has_step3_text:
         buttons.append([InlineKeyboardButton(text="🗑 Сбросить текст Шага 3", callback_data="free_course_step3_delete")])
     
-    # Шаг 3 - фото
-    if has_step3_photos:
-        buttons.append([InlineKeyboardButton(text="🔄 Заменить фото Шага 3", callback_data="video_step3_photos_upload")])
-        buttons.append([InlineKeyboardButton(text="🗑 Удалить фото Шага 3", callback_data="video_step3_photos_delete")])
-    else:
-        buttons.append([InlineKeyboardButton(text="➕ Загрузить фото Шага 3", callback_data="video_step3_photos_upload")])
-    
     # Шаг 3 - видео
     if has_step3_video:
         buttons.append([InlineKeyboardButton(text="🔄 Заменить видео Шага 3", callback_data="video_step3_video_upload")])
@@ -571,13 +581,50 @@ async def manage_free_course(callback: CallbackQuery):
     else:
         buttons.append([InlineKeyboardButton(text="➕ Загрузить видео Шага 3", callback_data="video_step3_video_upload")])
     
-    # Финальное сообщение
+    # Шаг 4 - текст
+    buttons.append([InlineKeyboardButton(
+        text=f"✏️ {'Изменить' if has_step4_text else 'Настроить'} текст Шага 4",
+        callback_data="free_course_step4_edit"
+    )])
+    if has_step4_text:
+        buttons.append([InlineKeyboardButton(text="🗑 Сбросить текст Шага 4", callback_data="free_course_step4_delete")])
+    
+    # Шаг 4 - фото
+    if has_step4_photos:
+        buttons.append([InlineKeyboardButton(text="🔄 Заменить фото Шага 4", callback_data="free_course_step4_photos_upload")])
+        buttons.append([InlineKeyboardButton(text="🗑 Удалить фото Шага 4", callback_data="free_course_step4_photos_delete")])
+    else:
+        buttons.append([InlineKeyboardButton(text="➕ Загрузить фото Шага 4", callback_data="free_course_step4_photos_upload")])
+    
+    # Шаг 5 - текст
+    buttons.append([InlineKeyboardButton(
+        text=f"✏️ {'Изменить' if has_step5_text else 'Настроить'} текст Шага 5",
+        callback_data="free_course_step5_edit"
+    )])
+    if has_step5_text:
+        buttons.append([InlineKeyboardButton(text="🗑 Сбросить текст Шага 5", callback_data="free_course_step5_delete")])
+    
+    # Шаг 5 - фото
+    if has_step5_photo:
+        buttons.append([InlineKeyboardButton(text="🔄 Заменить фото Шага 5", callback_data="free_course_step5_photo_upload")])
+        buttons.append([InlineKeyboardButton(text="🗑 Удалить фото Шага 5", callback_data="free_course_step5_photo_delete")])
+    else:
+        buttons.append([InlineKeyboardButton(text="➕ Загрузить фото Шага 5", callback_data="free_course_step5_photo_upload")])
+    
+    # Финальное сообщение - текст
     buttons.append([InlineKeyboardButton(
         text=f"✏️ {'Изменить' if has_final_message else 'Настроить'} финальное сообщение",
         callback_data="free_course_final_message_edit"
     )])
     if has_final_message:
         buttons.append([InlineKeyboardButton(text="🗑 Сбросить финальное сообщение", callback_data="free_course_final_message_delete")])
+    
+    # Финальное сообщение - фото
+    if has_final_photo:
+        buttons.append([InlineKeyboardButton(text="🔄 Заменить фото финала", callback_data="free_course_final_photo_upload")])
+        buttons.append([InlineKeyboardButton(text="🗑 Удалить фото финала", callback_data="free_course_final_photo_delete")])
+    else:
+        buttons.append([InlineKeyboardButton(text="➕ Загрузить фото финала", callback_data="free_course_final_photo_upload")])
     
     # Кнопка назад
     buttons.append([InlineKeyboardButton(text="◀️ Назад к курсам", callback_data="courses_management")])
