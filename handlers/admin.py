@@ -3044,7 +3044,7 @@ async def confirm_user_deletion(message: Message, state: FSMContext):
     if user.last_activity:
         user_info += f"🕐 Последняя активность: {user.last_activity.strftime('%d.%m.%Y %H:%M')}\n"
     
-    user_info += f"\n⚠️ **Вы уверены, что хотите удалить этого пользователя?**\n"
+    user_info += f"\n⚠️ <b>Вы уверены, что хотите удалить этого пользователя?</b>\n"
     user_info += f"Это действие необратимо!"
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -3054,8 +3054,7 @@ async def confirm_user_deletion(message: Message, state: FSMContext):
     
     await message.answer(
         user_info,
-        reply_markup=keyboard,
-        parse_mode="Markdown"
+        reply_markup=keyboard
     )
     
     await state.clear()
