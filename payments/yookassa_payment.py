@@ -61,8 +61,10 @@ class YooKassaPayment:
             "capture": True,
             "description": description,
             "metadata": payment_metadata,
-            # Не указываем payment_method_data - ЮKassa покажет все доступные методы:
-            # банковские карты, СБП (SberPay), ЮMoney, Google Pay, Apple Pay и др.
+            # Указываем метод оплаты СБП (Система Быстрых Платежей)
+            "payment_method_data": {
+                "type": "sbp"
+            },
             "receipt": {
                 "customer": {
                     "email": customer_email or config.RECEIPT_EMAIL
