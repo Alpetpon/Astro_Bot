@@ -4,7 +4,7 @@ from aiogram.fsm.context import FSMContext
 
 from config import config
 from database import get_db, UserRepository
-from data import get_active_guides, get_guide_by_id, get_mini_course, get_mini_course_tariff
+from data import get_active_guides, get_guide_by_id, get_mini_course, get_mini_course_tariff, get_course_by_slug
 from keyboards import get_main_menu_keyboard, get_back_keyboard, get_guides_list_keyboard, get_guide_keyboard, get_about_me_keyboard, get_mini_course_keyboard, get_mini_course_tariff_keyboard
 
 router = Router()
@@ -285,8 +285,14 @@ async def download_guide(callback: CallbackQuery):
         
         # Если есть связанный курс, добавляем кнопку перехода
         if guide.get('related_course_slug'):
+            course = get_course_by_slug(guide['related_course_slug'])
+            if course:
+                button_text = f"{course.get('emoji', '📚')} Курс «{course['name']}»"
+            else:
+                button_text = "📚 Перейти к курсу"
+            
             buttons.append([InlineKeyboardButton(
-                text="📚 Перейти к курсу",
+                text=button_text,
                 callback_data=f"course_{guide['related_course_slug']}"
             )])
         

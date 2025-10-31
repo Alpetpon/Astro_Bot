@@ -233,8 +233,14 @@ async def notify_guide_payment(bot: Bot, user: dict, payment: dict):
         buttons = []
         
         if guide.get('related_course_slug'):
+            course = get_course_by_slug(guide['related_course_slug'])
+            if course:
+                button_text = f"{course.get('emoji', '📚')} Курс «{course['name']}»"
+            else:
+                button_text = "📚 Перейти к курсу"
+            
             buttons.append([InlineKeyboardButton(
-                text="📚 Перейти к курсу",
+                text=button_text,
                 callback_data=f"course_{guide['related_course_slug']}"
             )])
         
