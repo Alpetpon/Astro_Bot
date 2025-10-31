@@ -533,15 +533,15 @@ async def show_support(callback: CallbackQuery):
     user_repo = UserRepository(db)
     await user_repo.update_activity(callback.from_user.id)
     
-    text = f"""💬 **Поддержка**
+    text = f"""💬 <b>Поддержка</b>
 
 Если у вас возникли вопросы или нужна помощь, вы можете связаться с нами:
 
-📱 **Telegram:** @{config.CONSULTATION_TELEGRAM}
+📱 <b>Telegram:</b> @{config.CONSULTATION_TELEGRAM}
 
 Мы ответим вам в течение 24 часов.
 
-🕐 **Часы работы поддержки:**
+🕐 <b>Часы работы поддержки:</b>
 Понедельник - Пятница: 10:00 - 19:00 (МСК)
 Суббота - Воскресенье: выходной
 
@@ -551,7 +551,7 @@ async def show_support(callback: CallbackQuery):
         await callback.message.edit_text(
             text,
             reply_markup=get_back_keyboard(),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
     except Exception:
         # Если не можем отредактировать - удаляем и отправляем новое
@@ -564,7 +564,7 @@ async def show_support(callback: CallbackQuery):
             chat_id=callback.message.chat.id,
             text=text,
             reply_markup=get_back_keyboard(),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
     
     await callback.answer()
