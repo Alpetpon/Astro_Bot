@@ -547,10 +547,17 @@ async def show_support(callback: CallbackQuery):
 
 Также вы можете изучить наши материалы или посмотреть отзывы других учеников, чтобы найти ответы на свои вопросы."""
     
+    # Создаем клавиатуру с кнопками
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="👤 Обо мне", callback_data="about_me")],
+        [InlineKeyboardButton(text="⭐️ Отзывы", callback_data="reviews")],
+        [InlineKeyboardButton(text="◀️ Назад в меню", callback_data="main_menu")]
+    ])
+    
     try:
         await callback.message.edit_text(
             text,
-            reply_markup=get_back_keyboard(),
+            reply_markup=keyboard,
             parse_mode="HTML"
         )
     except Exception:
@@ -563,7 +570,7 @@ async def show_support(callback: CallbackQuery):
         await callback.bot.send_message(
             chat_id=callback.message.chat.id,
             text=text,
-            reply_markup=get_back_keyboard(),
+            reply_markup=keyboard,
             parse_mode="HTML"
         )
     
