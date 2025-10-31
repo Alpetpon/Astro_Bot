@@ -523,3 +523,48 @@ async def show_webinar(callback: CallbackQuery):
         )
     
     await callback.answer()
+
+
+@router.callback_query(F.data == "support")
+async def show_support(callback: CallbackQuery):
+    """Показать информацию о поддержке"""
+    # Обновляем активность пользователя
+    db = await get_db()
+    user_repo = UserRepository(db)
+    await user_repo.update_activity(callback.from_user.id)
+    
+    text = f"""💬 **Поддержка**
+
+Если у вас возникли вопросы или нужна помощь, вы можете связаться с нами:
+
+📱 **Telegram:** @{config.CONSULTATION_TELEGRAM}
+
+Мы ответим вам в течение 24 часов.
+
+🕐 **Часы работы поддержки:**
+Понедельник - Пятница: 10:00 - 19:00 (МСК)
+Суббота - Воскресенье: выходной
+
+Также вы можете изучить наши материалы или посмотреть отзывы других учеников, чтобы найти ответы на свои вопросы."""
+    
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=get_back_keyboard(),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        # Если не можем отредактировать - удаляем и отправляем новое
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        
+        await callback.bot.send_message(
+            chat_id=callback.message.chat.id,
+            text=text,
+            reply_markup=get_back_keyboard(),
+            parse_mode="Markdown"
+        )
+    
+    await callback.answer()
