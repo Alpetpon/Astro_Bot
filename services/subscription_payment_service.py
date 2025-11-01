@@ -58,7 +58,7 @@ class SubscriptionPaymentService:
                     "return_url": return_url
                 },
                 "capture": True,
-                "save_payment_method": True,  # Сохраняем метод оплаты для автопродления
+                # "save_payment_method": True,  # ОТКЛЮЧЕНО: требует активации рекуррентных платежей в YooKassa
                 "description": f"Подписка на канал на {self.days} дней",
                 "metadata": {
                     "user_id": str(user_id),

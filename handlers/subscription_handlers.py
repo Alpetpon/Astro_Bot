@@ -254,12 +254,12 @@ async def check_payment(callback: CallbackQuery):
             # Получаем payment_method_id для автопродления
             payment_method_id = payment_data.get("payment_method_id")
             
-            # Создаем подписку с автопродлением
+            # Создаем подписку с автопродлением (только если есть payment_method_id)
             subscription = await subscription_service.create_subscription(
                 user_id=callback.from_user.id,
                 payment_id=payment_id,
                 payment_method_id=payment_method_id,
-                auto_renew=True
+                auto_renew=bool(payment_method_id)  # Включаем только если получен payment_method_id
             )
             
             # Связываем платеж с подпиской
