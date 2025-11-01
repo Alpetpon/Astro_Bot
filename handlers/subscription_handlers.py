@@ -328,7 +328,7 @@ async def show_subscription_status(callback: CallbackQuery):
         subscription = await subscription_service.get_active_subscription(callback.from_user.id)
         
         if not subscription:
-            text = """❌ **Подписка не найдена**
+            text = """❌ <b>Подписка не найдена</b>
 
 У вас нет активной подписки на канал.
 
@@ -337,7 +337,7 @@ async def show_subscription_status(callback: CallbackQuery):
             await callback.message.edit_text(
                 text,
                 reply_markup=get_subscription_channel_keyboard(False),
-                parse_mode="Markdown"
+                parse_mode="HTML"
             )
         else:
             # Форматируем даты
@@ -347,16 +347,22 @@ async def show_subscription_status(callback: CallbackQuery):
             hours_left = ((end_date - now).seconds // 3600)
             
             end_date_str = end_date.strftime('%d.%m.%Y %H:%M')
+            auto_renew = subscription.get('auto_renew', False)
             
-            # Формируем сообщение
-            text = f"""📊 **Статус подписки**
+            # Формируем сообщение (используем HTML вместо Markdown из-за ссылки)
+            text = f"""📊 <b>Статус подписки</b>
 
 ✅ Подписка активна
 
-📅 **Дата окончания:** {end_date_str}
-⏳ **Осталось:** {days_left} дн. {hours_left} ч.
+📅 <b>Дата окончания:</b> {end_date_str}
+⏳ <b>Осталось:</b> {days_left} дн. {hours_left} ч."""
+            
+            if auto_renew:
+                text += f"\n🔄 <b>Автопродление:</b> включено"
+            
+            text += f"""
 
-🔗 **Ваша ссылка:**
+🔗 <b>Ваша ссылка:</b>
 {subscription['invite_link']}
 
 💡 Вы получите напоминание за 3 дня и за 1 день до окончания."""
@@ -367,7 +373,7 @@ async def show_subscription_status(callback: CallbackQuery):
             await callback.message.edit_text(
                 text,
                 reply_markup=get_subscription_status_keyboard(can_renew),
-                parse_mode="Markdown"
+                parse_mode="HTML"
             )
         
         await callback.answer()
