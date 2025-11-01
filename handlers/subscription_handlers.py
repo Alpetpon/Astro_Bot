@@ -251,10 +251,15 @@ async def check_payment(callback: CallbackQuery):
                 paid_at=datetime.utcnow()
             )
             
-            # Создаем подписку
+            # Получаем payment_method_id для автопродления
+            payment_method_id = payment_data.get("payment_method_id")
+            
+            # Создаем подписку с автопродлением
             subscription = await subscription_service.create_subscription(
                 user_id=callback.from_user.id,
-                payment_id=payment_id
+                payment_id=payment_id,
+                payment_method_id=payment_method_id,
+                auto_renew=True
             )
             
             # Связываем платеж с подпиской
@@ -265,6 +270,7 @@ async def check_payment(callback: CallbackQuery):
             
             # Формируем сообщение с ссылкой
             end_date_str = subscription['end_date'].strftime('%d.%m.%Y %H:%M')
+            auto_renew = subscription.get('auto_renew', False)
             
             text = f"""✅ **Оплата успешно завершена!**
 
@@ -273,7 +279,13 @@ async def check_payment(callback: CallbackQuery):
 🔗 **Ваша персональная ссылка:**
 {subscription['invite_link']}
 
-📅 **Действует до:** {end_date_str}
+📅 **Действует до:** {end_date_str}"""
+            
+            if auto_renew:
+                text += f"\n🔄 **Автопродление:** включено"
+                text += f"\n💳 Через {config.SUBSCRIPTION_DAYS} дней автоматически спишется {config.SUBSCRIPTION_PRICE:.0f}₽"
+            
+            text += """
 
 💡 **Важно:**
 • Ссылка работает только для вас

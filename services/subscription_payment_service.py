@@ -58,6 +58,7 @@ class SubscriptionPaymentService:
                     "return_url": return_url
                 },
                 "capture": True,
+                "save_payment_method": True,  # Сохраняем метод оплаты для автопродления
                 "description": f"Подписка на канал на {self.days} дней",
                 "metadata": {
                     "user_id": str(user_id),
@@ -113,12 +114,18 @@ class SubscriptionPaymentService:
         try:
             payment = Payment.find_one(payment_id)
             
+            # Получаем payment_method_id, если есть
+            payment_method_id = None
+            if hasattr(payment, 'payment_method') and payment.payment_method:
+                payment_method_id = payment.payment_method.id
+            
             return {
                 "payment_id": payment.id,
                 "status": payment.status,
                 "paid": payment.paid,
                 "amount": float(payment.amount.value),
                 "currency": payment.amount.currency,
+                "payment_method_id": payment_method_id,
                 "created_at": payment.created_at,
                 "captured_at": getattr(payment, 'captured_at', None)
             }

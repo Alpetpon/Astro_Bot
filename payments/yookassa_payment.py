@@ -28,7 +28,8 @@ class YooKassaPayment:
         description: str, 
         return_url: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
-        customer_email: Optional[str] = None
+        customer_email: Optional[str] = None,
+        save_payment_method: bool = False
     ) -> Optional[Dict[str, Any]]:
         """
         Создание платежа в YooKassa
@@ -39,6 +40,7 @@ class YooKassaPayment:
             return_url: URL для возврата после оплаты
             metadata: Дополнительные метаданные для платежа
             customer_email: Email покупателя для чека
+            save_payment_method: Сохранить метод оплаты для рекуррентных платежей
             
         Returns:
             dict: Данные созданного платежа или None при ошибке
@@ -81,8 +83,12 @@ class YooKassaPayment:
             }
         }
         
+        # Добавляем сохранение метода оплаты для рекуррентных платежей
+        if save_payment_method:
+            payment_data["save_payment_method"] = True
+        
         try:
-            logger.info(f"Creating payment: amount={amount}, description={description}, email={customer_email or config.RECEIPT_EMAIL}")
+            logger.info(f"Creating payment: amount={amount}, description={description}, email={customer_email or config.RECEIPT_EMAIL}, save_method={save_payment_method}")
             payment = Payment.create(payment_data, idempotence_key)
             
             result = {
@@ -120,10 +126,11 @@ class YooKassaPayment:
                 'paid': payment.paid,
                 'amount': float(payment.amount.value),
                 'currency': payment.amount.currency,
-                'metadata': payment.metadata if hasattr(payment, 'metadata') else {}
+                'metadata': payment.metadata if hasattr(payment, 'metadata') else {},
+                'payment_method_id': payment.payment_method.id if hasattr(payment, 'payment_method') and payment.payment_method else None
             }
             
-            logger.info(f"Payment status retrieved: {payment_id} - {payment.status}")
+            logger.info(f"Payment status retrieved: {payment_id} - {payment.status}, payment_method_id: {result['payment_method_id']}")
             return result
             
         except Exception as e:
@@ -149,6 +156,80 @@ class YooKassaPayment:
         except Exception as e:
             logger.error(f"Error canceling payment {payment_id}: {e}", exc_info=True)
             return False
+    
+    def create_recurrent_payment(
+        self,
+        amount: float,
+        description: str,
+        payment_method_id: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        customer_email: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Создание рекуррентного платежа с сохраненным методом оплаты
+        
+        Args:
+            amount: Сумма платежа в рублях
+            description: Описание платежа
+            payment_method_id: ID сохраненного метода оплаты
+            metadata: Дополнительные метаданные
+            customer_email: Email покупателя для чека
+            
+        Returns:
+            dict: Данные созданного платежа или None при ошибке
+        """
+        idempotence_key = str(uuid.uuid4())
+        
+        payment_metadata = {"order_id": idempotence_key, "recurrent": True}
+        if metadata:
+            payment_metadata.update(metadata)
+        
+        payment_data = {
+            "amount": {
+                "value": f"{amount:.2f}",
+                "currency": "RUB"
+            },
+            "payment_method_id": payment_method_id,
+            "capture": True,
+            "description": description,
+            "metadata": payment_metadata,
+            "receipt": {
+                "customer": {
+                    "email": customer_email or config.RECEIPT_EMAIL
+                },
+                "items": [
+                    {
+                        "description": description[:128],
+                        "quantity": "1.00",
+                        "amount": {
+                            "value": f"{amount:.2f}",
+                            "currency": "RUB"
+                        },
+                        "vat_code": 1,
+                        "payment_mode": "full_payment",
+                        "payment_subject": "service"
+                    }
+                ]
+            }
+        }
+        
+        try:
+            logger.info(f"Creating recurrent payment: amount={amount}, payment_method={payment_method_id}")
+            payment = Payment.create(payment_data, idempotence_key)
+            
+            result = {
+                'id': payment.id,
+                'status': payment.status,
+                'amount': float(payment.amount.value),
+                'currency': payment.amount.currency
+            }
+            
+            logger.info(f"Recurrent payment created: {payment.id}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error creating recurrent payment: {e}", exc_info=True)
+            return None
     
     @staticmethod
     def parse_webhook_notification(request_body: Dict[str, Any]) -> Optional[Any]:

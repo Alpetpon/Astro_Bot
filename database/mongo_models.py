@@ -198,6 +198,9 @@ class Subscription:
         notified_3_days: bool = False,
         notified_1_day: bool = False,
         payment_id: Optional[str] = None,
+        payment_method_id: Optional[str] = None,
+        auto_renew: bool = False,
+        renewal_attempted: bool = False,
         created_at: Optional[datetime] = None,
         _id: Optional[ObjectId] = None
     ):
@@ -210,6 +213,9 @@ class Subscription:
         self.notified_3_days = notified_3_days
         self.notified_1_day = notified_1_day
         self.payment_id = payment_id
+        self.payment_method_id = payment_method_id
+        self.auto_renew = auto_renew
+        self.renewal_attempted = renewal_attempted
         self.created_at = created_at or datetime.utcnow()
     
     def to_dict(self) -> Dict[str, Any]:
@@ -223,6 +229,9 @@ class Subscription:
             "notified_3_days": self.notified_3_days,
             "notified_1_day": self.notified_1_day,
             "payment_id": self.payment_id,
+            "payment_method_id": self.payment_method_id,
+            "auto_renew": self.auto_renew,
+            "renewal_attempted": self.renewal_attempted,
             "created_at": self.created_at
         }
         if self.id:
@@ -244,6 +253,9 @@ class Subscription:
             notified_3_days=data.get("notified_3_days", False),
             notified_1_day=data.get("notified_1_day", False),
             payment_id=data.get("payment_id"),
+            payment_method_id=data.get("payment_method_id"),
+            auto_renew=data.get("auto_renew", False),
+            renewal_attempted=data.get("renewal_attempted", False),
             created_at=data.get("created_at")
         )
 

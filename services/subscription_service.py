@@ -76,7 +76,7 @@ class SubscriptionService:
                 chat_id=self.channel_id,
                 name=f"Подписка для пользователя {user_id}",
                 expire_date=expire_date,
-                member_limit=1  # Только для одного пользователя!
+                member_limit=5  # Несколько попыток входа
             )
             
             logger.info(f"Created invite link for user {user_id}")
@@ -86,13 +86,21 @@ class SubscriptionService:
             logger.error(f"Error creating invite link for user {user_id}: {e}")
             raise
     
-    async def create_subscription(self, user_id: int, payment_id: str) -> Dict[str, Any]:
+    async def create_subscription(
+        self, 
+        user_id: int, 
+        payment_id: str, 
+        payment_method_id: Optional[str] = None,
+        auto_renew: bool = True
+    ) -> Dict[str, Any]:
         """
         Создать подписку после успешной оплаты
         
         Args:
             user_id: Telegram ID пользователя
             payment_id: ID платежа YooKassa
+            payment_method_id: ID метода оплаты для автопродления
+            auto_renew: Включить автопродление
             
         Returns:
             Словарь с данными созданной подписки
@@ -112,7 +120,9 @@ class SubscriptionService:
                 start_date=start_date,
                 end_date=end_date,
                 is_active=True,
-                payment_id=payment_id
+                payment_id=payment_id,
+                payment_method_id=payment_method_id,
+                auto_renew=auto_renew and payment_method_id is not None
             )
             
             # Сохраняем в БД
@@ -122,7 +132,7 @@ class SubscriptionService:
             subscription_data = subscription.to_dict()
             subscription_data['_id'] = result.inserted_id
             
-            logger.info(f"Created subscription for user {user_id} until {end_date}")
+            logger.info(f"Created subscription for user {user_id} until {end_date}, auto_renew={subscription.auto_renew}")
             return subscription_data
             
         except Exception as e:
@@ -388,6 +398,104 @@ class SubscriptionService:
         except Exception as e:
             logger.error(f"Error getting expired subscriptions: {e}")
             return []
+    
+    async def get_subscriptions_to_renew(self) -> list:
+        """
+        Получить подписки, которые нужно продлить автоматически
+        (истекают завтра и еще не было попытки продления)
+        
+        Returns:
+            Список подписок для автопродления
+        """
+        try:
+            db = mongodb.get_database()
+            
+            # Границы временного окна (завтра)
+            now = datetime.utcnow()
+            tomorrow_start = now + timedelta(days=1)
+            tomorrow_end = tomorrow_start + timedelta(hours=2)  # Окно в 2 часа
+            
+            subscriptions = await db.subscriptions.find({
+                "is_active": True,
+                "auto_renew": True,
+                "renewal_attempted": False,
+                "payment_method_id": {"$exists": True, "$ne": None},
+                "end_date": {
+                    "$gte": tomorrow_start,
+                    "$lt": tomorrow_end
+                }
+            }).to_list(length=None)
+            
+            return subscriptions
+            
+        except Exception as e:
+            logger.error(f"Error getting subscriptions to renew: {e}")
+            return []
+    
+    async def mark_renewal_attempted(self, subscription_id) -> bool:
+        """
+        Пометить, что была попытка продления
+        
+        Args:
+            subscription_id: ID подписки
+            
+        Returns:
+            True если успешно помечено
+        """
+        try:
+            db = mongodb.get_database()
+            result = await db.subscriptions.update_one(
+                {"_id": subscription_id},
+                {"$set": {"renewal_attempted": True}}
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            logger.error(f"Error marking renewal attempted: {e}")
+            return False
+    
+    async def extend_subscription(self, subscription_id, new_payment_id: str) -> bool:
+        """
+        Продлить существующую подписку на следующий период
+        
+        Args:
+            subscription_id: ID подписки
+            new_payment_id: ID нового платежа
+            
+        Returns:
+            True если успешно продлено
+        """
+        try:
+            db = mongodb.get_database()
+            
+            # Получаем текущую подписку
+            subscription = await db.subscriptions.find_one({"_id": subscription_id})
+            if not subscription:
+                return False
+            
+            # Новая дата окончания (от текущей даты окончания + 30 дней)
+            current_end = subscription['end_date']
+            new_end = current_end + timedelta(days=self.subscription_days)
+            
+            # Обновляем подписку
+            result = await db.subscriptions.update_one(
+                {"_id": subscription_id},
+                {
+                    "$set": {
+                        "end_date": new_end,
+                        "payment_id": new_payment_id,
+                        "renewal_attempted": False,
+                        "notified_3_days": False,
+                        "notified_1_day": False
+                    }
+                }
+            )
+            
+            logger.info(f"Extended subscription {subscription_id} until {new_end}")
+            return result.modified_count > 0
+            
+        except Exception as e:
+            logger.error(f"Error extending subscription: {e}")
+            return False
     
     async def get_subscription_stats(self) -> Dict[str, Any]:
         """

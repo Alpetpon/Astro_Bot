@@ -56,10 +56,12 @@ async def run_sales_bot():
     logger.info("Initializing subscription services...")
     from services.subscription_service import SubscriptionService
     from services.subscription_payment_service import SubscriptionPaymentService
+    from payments import YooKassaPayment
     from handlers import subscription_handlers, admin_subscriptions
     
     subscription_service = SubscriptionService(bot)
     payment_service = SubscriptionPaymentService()
+    yookassa_payment = YooKassaPayment()
     
     # Инициализируем сервисы в обработчиках
     subscription_handlers.init_services(subscription_service, payment_service)
@@ -91,9 +93,9 @@ async def run_sales_bot():
     # Запуск планировщика для подписок
     logger.info("Starting subscription scheduler...")
     from scheduler.subscription_tasks import setup_subscription_scheduler
-    subscription_scheduler = setup_subscription_scheduler(bot, subscription_service)
+    subscription_scheduler = setup_subscription_scheduler(bot, subscription_service, yookassa_payment)
     subscription_scheduler.start()
-    logger.info("✅ Планировщик подписок запущен")
+    logger.info("✅ Планировщик подписок запущен (с автопродлением)")
     
     # Запуск основного бота (воронка продаж)
     logger.info("💼 Sales bot started successfully!")
