@@ -21,6 +21,7 @@ router = Router()
 async def show_my_cabinet(callback: CallbackQuery):
     """Показать личный кабинет - статистика покупок"""
     from config import config as bot_config
+    from database.mongodb import mongodb
     
     db = await get_db()
     user_repo = UserRepository(db)
@@ -52,8 +53,22 @@ async def show_my_cabinet(callback: CallbackQuery):
         text += f"• Гайдов: {guides_count}\n\n"
         text += f"💰 Всего потрачено: {total_spent:,.0f} ₽\n\n"
         
+        # Проверяем активную подписку на канал
+        mongo_db = mongodb.get_database()
+        active_subscription = await mongo_db.subscriptions.find_one({
+            "user_id": callback.from_user.id,
+            "is_active": True
+        })
+        
         # Создаём клавиатуру
         buttons = []
+        
+        # Если есть активная подписка - добавляем кнопку управления
+        if active_subscription:
+            buttons.append([InlineKeyboardButton(
+                text="🔄 Управление подпиской",
+                callback_data="manage_subscription"
+            )])
         
         if payments:
             text += "<b>🛍 Мои покупки:</b>\n\n"
@@ -156,6 +171,150 @@ async def show_my_courses(callback: CallbackQuery):
     """Перенаправление на личный кабинет (для совместимости)"""
     # Перенаправляем на my_cabinet
     await show_my_cabinet(callback)
+
+
+@router.callback_query(F.data == "manage_subscription")
+async def manage_subscription(callback: CallbackQuery):
+    """Управление подпиской на канал"""
+    from database.mongodb import mongodb
+    from datetime import datetime
+    
+    try:
+        mongo_db = mongodb.get_database()
+        subscription = await mongo_db.subscriptions.find_one({
+            "user_id": callback.from_user.id,
+            "is_active": True
+        })
+        
+        if not subscription:
+            await callback.answer("Активная подписка не найдена", show_alert=True)
+            return
+        
+        # Форматируем данные
+        end_date = subscription['end_date']
+        now = datetime.utcnow()
+        days_left = (end_date - now).days
+        end_date_str = end_date.strftime('%d.%m.%Y %H:%M')
+        
+        auto_renew = subscription.get('auto_renew', False)
+        has_payment_method = subscription.get('payment_method_id') is not None
+        
+        # Формируем текст
+        text = "<b>🔄 Управление подпиской</b>\n\n"
+        text += f"📅 <b>Действует до:</b> {end_date_str}\n"
+        text += f"⏳ <b>Осталось:</b> {days_left} дней\n\n"
+        
+        if auto_renew:
+            text += "🔄 <b>Автопродление:</b> ✅ включено\n"
+            text += "💳 Подписка будет автоматически продлена\n\n"
+        else:
+            text += "🔄 <b>Автопродление:</b> ❌ отключено\n\n"
+        
+        if has_payment_method:
+            text += "💳 <b>Карта:</b> привязана\n\n"
+        else:
+            text += "💳 <b>Карта:</b> не привязана\n\n"
+        
+        text += "⚙️ <b>Настройки:</b>"
+        
+        # Формируем кнопки
+        buttons = []
+        
+        if auto_renew:
+            buttons.append([InlineKeyboardButton(
+                text="❌ Отключить автопродление",
+                callback_data="disable_auto_renew"
+            )])
+        
+        if has_payment_method:
+            buttons.append([InlineKeyboardButton(
+                text="🗑 Отвязать карту",
+                callback_data="unbind_card"
+            )])
+        
+        buttons.append([InlineKeyboardButton(
+            text="◀️ Назад в кабинет",
+            callback_data="my_cabinet"
+        )])
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        
+        await callback.message.edit_text(
+            text,
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+        await callback.answer()
+        
+    except Exception as e:
+        logger.error(f"Error in manage_subscription: {e}", exc_info=True)
+        await callback.answer("Произошла ошибка", show_alert=True)
+
+
+@router.callback_query(F.data == "disable_auto_renew")
+async def disable_auto_renew(callback: CallbackQuery):
+    """Отключить автопродление подписки"""
+    from database.mongodb import mongodb
+    
+    try:
+        mongo_db = mongodb.get_database()
+        
+        result = await mongo_db.subscriptions.update_one(
+            {
+                "user_id": callback.from_user.id,
+                "is_active": True
+            },
+            {
+                "$set": {"auto_renew": False}
+            }
+        )
+        
+        if result.modified_count > 0:
+            await callback.answer("✅ Автопродление отключено", show_alert=True)
+            # Обновляем экран управления подпиской
+            await manage_subscription(callback)
+        else:
+            await callback.answer("Подписка не найдена", show_alert=True)
+        
+    except Exception as e:
+        logger.error(f"Error in disable_auto_renew: {e}", exc_info=True)
+        await callback.answer("Произошла ошибка", show_alert=True)
+
+
+@router.callback_query(F.data == "unbind_card")
+async def unbind_card(callback: CallbackQuery):
+    """Отвязать карту (удалить payment_method_id)"""
+    from database.mongodb import mongodb
+    
+    try:
+        mongo_db = mongodb.get_database()
+        
+        result = await mongo_db.subscriptions.update_one(
+            {
+                "user_id": callback.from_user.id,
+                "is_active": True
+            },
+            {
+                "$set": {
+                    "payment_method_id": None,
+                    "auto_renew": False  # Автопродление тоже отключаем
+                }
+            }
+        )
+        
+        if result.modified_count > 0:
+            await callback.answer(
+                "✅ Карта отвязана\nАвтопродление отключено",
+                show_alert=True
+            )
+            # Обновляем экран управления подпиской
+            await manage_subscription(callback)
+        else:
+            await callback.answer("Подписка не найдена", show_alert=True)
+        
+    except Exception as e:
+        logger.error(f"Error in unbind_card: {e}", exc_info=True)
+        await callback.answer("Произошла ошибка", show_alert=True)
 
 
 # Удалены хэндлеры для материалов курсов - они теперь в учебном боте (learning_bot.py)
